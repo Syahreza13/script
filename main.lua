@@ -200,9 +200,6 @@ end
 --------------------------------------------------
 -- RECIPES
 --------------------------------------------------
-
-local recipes={
-
 local recipes = {
     -- 1. Mistveil Focus Pill
     ["Mistveil Focus Pill A"] = { ["Spirit Spring Herb"] = 2, ["Azure Serpent Grass"] = 1, ["Silverleaf Herb"] = 2, ["Thousand Year Lotus"] = 1 },
@@ -293,9 +290,6 @@ local recipes = {
     ["Lotus Nirvana Pill"] = { ["Thousand Year Lotus"] = 6 },
     ["Heavenly Spirit Pill"] = { ["Heavenly Spirit Vine"] = 2, ["Starlight Dew Herb"] = 3, ["Moonlight Jade Leaf"] = 1 }
 }
-
-}
-
 --------------------------------------------------
 -- AUTO FORAGE (ASLI — TIDAK DIUBAH)
 --------------------------------------------------
