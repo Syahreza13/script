@@ -165,22 +165,40 @@ return 0
 
 end
 
-local function canCraft(recipe)
+local function canCraft(recipeName, ingredientTable)
 
-local missing={}
+    if not ingredientTable then
+        warn("❌ Invalid recipe:", recipeName)
+        return false
+    end
 
-for herb,qty in pairs(recipe[2]) do
+    local missing = {}
 
-local have=getHerbCount(herb)
+    for herb, qty in pairs(ingredientTable) do
 
-if have<qty then
+        local have = getHerbCount(herb)
 
-table.insert(
-missing,
-herb.." ("..have.."/"..qty..")"
-)
+        if have < qty then
 
-end
+            table.insert(
+                missing,
+                herb.." ("..have.."/"..qty..")"
+            )
+
+        end
+
+    end
+
+    if #missing > 0 then
+
+        print("❌ Missing:", recipeName)
+        print(table.concat(missing,", "))
+
+        return false
+
+    end
+
+    return true
 
 end
 
