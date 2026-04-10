@@ -101,7 +101,6 @@ end)
 --------------------------------------------------
 -- TIMER DETECTOR
 --------------------------------------------------
-
 local timerLabel =
 player.PlayerGui
 :WaitForChild("ScreenGui")
@@ -109,17 +108,35 @@ player.PlayerGui
 :WaitForChild("WaitFrame")
 :WaitForChild("Time")
 
-local function isTimerRunning()
+-- Ambil angka timer
+local function getTimerValue()
 
-local txt=timerLabel.Text
+    local txt = timerLabel.Text
 
-local num=tonumber(string.match(txt,"%-?[%d%.]+"))
+    if not txt then return 0 end
 
-if num and num>0 then
-return true
+    local num = tonumber(
+        string.match(txt,"%-?[%d%.]+")
+    )
+
+    if num then
+        return num
+    end
+
+    return 0
+
 end
 
-return false
+-- Cek apakah timer masih berjalan
+local function isTimerRunning()
+
+    local timeLeft = getTimerValue()
+
+    if timeLeft > 0 then
+        return true
+    end
+
+    return false
 
 end
 
@@ -210,19 +227,75 @@ end
 
 local recipes = {
 
-["Mistveil Focus Pill A"] = {
-["Spirit Spring Herb"]=2,
-["Azure Serpent Grass"]=1,
-["Silverleaf Herb"]=2,
-["Thousand Year Lotus"]=1
-},
+-- Mistveil Focus Pill
+["Mistveil Focus Pill A"] = { ["Spirit Spring Herb"]=2, ["Azure Serpent Grass"]=1, ["Silverleaf Herb"]=2, ["Thousand Year Lotus"]=1 },
+["Mistveil Focus Pill B"] = { ["Spirit Spring Herb"]=1,["Blue Wave Coral Herb"]=1,["Cloud Mist Herb"]=3,["Thousand Year Lotus"]=1 },
+["Mistveil Focus Pill C"] = { ["Spirit Spring Herb"]=2, ["Silverleaf Herb"]=3, ["Starlight Dew Herb"]=1 },
+["Mistveil Focus Pill D"] = { ["Blue Wave Coral Herb"]=1, ["Spirit Spring Herb"]=2, ["Azure Serpent Grass"]=1, ["Silverleaf Herb"]=2 },
+["Mistveil Focus Pill E"] = { ["Blue Wave Coral Herb"]=1, ["Cloud Mist Herb"]=1, ["Spirit Spring Herb"]=1, ["Azure Serpent Grass"]=1, ["Silverleaf Herb"]=1, ["Seven Star Flower"]=1 },
+["Mistveil Focus Pill F"] = { ["Heavenly Spirit Vine"]=2, ["Cloud Mist Herb"]=1, ["Spirit Spring Herb"]=3 },
+["Mistveil Focus Pill G"] = { ["Heavenly Spirit Vine"]=1, ["Cloud Mist Herb"]=2, ["Blue Wave Coral Herb"]=1, ["Spirit Spring Herb"]=2 },
+["Mistveil Focus Pill H"] = { ["Blue Wave Coral Herb"]=1, ["Cloud Mist Herb"]=2, ["Spirit Spring Herb"]=1, ["Azure Serpent Grass"]=1, ["Seven Star Flower"]=1 },
+["Mistveil Focus Pill I"] = { ["Starlight Dew Herb"]=1, ["Cloud Mist Herb"]=2, ["Silverleaf Herb"]=1, ["Spirit Spring Herb"]=2 },
+["Mistveil Focus Pill J"] = { ["Spirit Spring Herb"]=2, ["Purple Lightning Orchid"]=1, ["Seven Star Flower"]=1, ["Silverleaf Herb"]=2 },
+["Mistveil Focus Pill K"] = { ["Cloud Mist Herb"]=1, ["Spirit Spring Herb"]=1, ["Azure Serpent Grass"]=1, ["Silverleaf Herb"]=1, ["Seven Star Flower"]=2 },
+["Mistveil Focus Pill L"] = { ["Spirit Spring Herb"]=3, ["Azure Serpent Grass"]=2, ["Cloud Mist Herb"]=1 },
+["Mistveil Focus Pill M"] = { ["Spirit Spring Herb"]=3, ["Purple Lightning Orchid"]=1, ["Silverleaf Herb"]=2 },
+["Mistveil Focus Pill N"] = { ["Spirit Spring Herb"]=2, ["Seven Star Flower"]=1, ["Silverleaf Herb"]=3 },
+["Mistveil Focus Pill O"] = { ["Spirit Spring Herb"]=2, ["Seven Star Flower"]=1, ["Silverleaf Herb"]=2, ["Cloud Mist Herb"]=1 },
+["Mistveil Focus Pill P"] = { ["Silverleaf Herb"]=3, ["Spirit Spring Herb"]=3 },
+["Mistveil Focus Pill Q"] = { ["Spirit Spring Herb"]=3, ["Purple Lightning Orchid"]=1, ["Cloud Mist Herb"]=2 },
+["Mistveil Focus Pill R"] = { ["Spirit Spring Herb"]=2, ["Seven Star Flower"]=1, ["Silverleaf Herb"]=1, ["Cloud Mist Herb"]=2 },
+["Mistveil Focus Pill S"] = { ["Spirit Spring Herb"]=2, ["Cloud Mist Herb"]=1, ["Silverleaf Herb"]=1, ["Wild Spirit Grass"]=1, ["Purple Lightning Orchid"]=1 },
+["Mistveil Focus Pill T"] = { ["Cloud Mist Herb"]=3, ["Spirit Spring Herb"]=3 },
+["Mistveil Focus Pill U"] = { ["Spirit Spring Herb"]=2, ["Cloud Mist Herb"]=2, ["Silverleaf Herb"]=1, ["Wild Spirit Grass"]=1 },
+["Mistveil Focus Pill V"] = { ["Spirit Spring Herb"]=2, ["Silverleaf Herb"]=2, ["Dandelion of Qi"]=1, ["Purple Lightning Orchid"]=1 },
+["Mistveil Focus Pill W"] = { ["Spirit Spring Herb"]=1, ["Silverleaf Herb"]=1, ["Dandelion of Qi"]=1, ["Purple Lightning Orchid"]=1, ["Cloud Mist Herb"]=1, ["Seven Star Flower"]=1 },
+["Mistveil Focus Pill X"] = { ["Spirit Spring Herb"]=1, ["Cloud Mist Herb"]=1, ["Silverleaf Herb"]=2, ["Dandelion of Qi"]=1, ["Seven Star Flower"]=1 },
+["Mistveil Focus Pill Y"] = { ["Dandelion of Qi"]=2, ["Purple Lightning Orchid"]=1, ["Cloud Mist Herb"]=2, ["Spirit Spring Herb"]=1 },
 
-["Mistveil Focus Pill B"] = {
-["Spirit Spring Herb"]=1,
-["Blue Wave Coral Herb"]=1,
-["Cloud Mist Herb"]=3,
-["Thousand Year Lotus"]=1
-},
+-- Jade Tide Pill
+["Jade Tide Pill A"] = { ["Moonlight Jade Leaf"]=2, ["Blue Wave Coral Herb"]=2, ["Bitter Jade Grass"]=2 },
+["Jade Tide Pill B"] = { ["Black Iron Root"]=1, ["Moonlight Jade Leaf"]=2, ["Blue Wave Coral Herb"]=2, ["Bitter Jade Grass"]=2 },
+["Jade Tide Pill C"] = { ["Black Iron Root"]=2, ["Blue Wave Coral Herb"]=2, ["Bitter Jade Grass"]=2 },
+["Jade Tide Pill D"] = { ["Blue Wave Coral Herb"]=2, ["Moonlight Jade Leaf"]=2, ["Red Ginseng"]=1, ["Bitter Jade Grass"]=1 },
+["Jade Tide Pill E"] = { ["Ironbone Grass"]=2, ["Blue Wave Coral Herb"]=2, ["Bitter Jade Grass"]=2 },
+["Jade Tide Pill F"] = { ["Crimson Flame Mushroom"]=2, ["Blue Wave Coral Herb"]=2, ["Red Ginseng"]=2 },
+["Jade Tide Pill G"] = { ["Blue Wave Coral Herb"]=2, ["Black Iron Root"]=1, ["Crimson Flame Mushroom"]=1, ["Bitter Jade Grass"]=2 },
+
+-- Celestial Harmony Pill
+["Celestial Harmony Pill A"] = { ["Thousand Year Lotus"]=1, ["Seven Star Flower"]=2, ["Moonlight Jade Leaf"]=1, ["Silverleaf Herb"]=1, ["Starlight Dew Herb"]=1 },
+["Celestial Harmony Pill B"] = { ["Seven Star Flower"]=2, ["Moonlight Jade Leaf"]=1, ["Silverleaf Herb"]=1, ["Starlight Dew Herb"]=2 },
+["Celestial Harmony Pill C"] = { ["Seven Star Flower"]=2, ["Black Iron Root"]=1, ["Silverleaf Herb"]=1, ["Starlight Dew Herb"]=2 },
+["Celestial Harmony Pill D"] = { ["Seven Star Flower"]=2, ["Black Iron Root"]=1, ["Blue Wave Coral Herb"]=2, ["Silverleaf Herb"]=1 },
+["Celestial Harmony Pill E"] = { ["Seven Star Flower"]=2, ["Spirit Spring Herb"]=1, ["Silverleaf Herb"]=1, ["Thousand Year Lotus"]=1, ["Moonlight Jade Leaf"]=1 },
+["Celestial Harmony Pill F"] = { ["Cloud Mist Herb"]=1, ["Seven Star Flower"]=3, ["Moonlight Jade Leaf"]=1, ["Starlight Dew Herb"]=1 },
+["Celestial Harmony Pill G"] = {["Silverleaf Herb"]=1,["Seven Star Flower"]=1,["Mountain Green Herb"]=1,["Dandelion of Qi"]=1,["Wild Spirit Grass"]=2},
+["Celestial Harmony Pill H"] = { ["Thousand Year Lotus"]=1, ["Silverleaf Herb"]=1, ["Seven Star Flower"]=3, ["Moonlight Jade Leaf"]=1 },
+
+-- Concentration Pill
+["Concentration Pill A"] = { ["Azure Serpent Grass"]=2, ["Starlight Dew Herb"]=2, ["Heavenly Spirit Vine"]=1, ["Thousand Year Lotus"]=1 },
+["Concentration Pill B"] = { ["Azure Serpent Grass"]=3, ["Thousand Year Lotus"]=3 },
+["Concentration Pill C"] = { ["Azure Serpent Grass"]=3, ["Starlight Dew Herb"]=3 },
+["Concentration Pill D"] = { ["Starlight Dew Herb"]=2, ["Azure Serpent Grass"]=2, ["Heavenly Spirit Vine"]=1, ["Blue Wave Coral Herb"]=1 },
+["Concentration Pill E"] = { ["Azure Serpent Grass"]=2, ["Starlight Dew Herb"]=2, ["Purple Lightning Orchid"]=1, ["Seven Star Flower"]=1 },
+["Concentration Pill F"] = { ["Cloud Mist Herb"]=3, ["Starlight Dew Herb"]=3 },
+["Concentration Pill G"] = { ["Azure Serpent Grass"]=3, ["Starlight Dew Herb"]=1, ["Seven Star Flower"]=2 },
+["Concentration Pill H"] = { ["Seven Star Flower"]=3, ["Azure Serpent Grass"]=3 },
+["Concentration Pill I"] = { ["Azure Serpent Grass"]=3, ["Seven Star Flower"]=1, ["Dandelion of Qi"]=2 },
+
+-- Stormheart Pill
+["Stormheart Pill A"] = { ["Azure Serpent Grass"]=2, ["Cloud Mist Herb"]=2, ["Spirit Spring Herb"]=2 },
+["Stormheart Pill B"] = { ["Heavenly Spirit Vine"]=2, ["Spirit Spring Herb"]=2, ["Cloud Mist Herb"]=2 },
+["Stormheart Pill C"] = { ["Cloud Mist Herb"]=4, ["Spirit Spring Herb"]=2 },
+["Stormheart Pill D"] = { ["Cloud Mist Herb"]=4, ["Spirit Spring Herb"]=1, ["Dandelion of Qi"]=1 },
+["Stormheart Pill E"] = { ["Dandelion of Qi"]=1, ["Seven Star Flower"]=1, ["Purple Lightning Orchid"]=1, ["Cloud Mist Herb"]=3 },
+
+-- Lotus
+["Lotus Nirvana Pill"] = { ["Thousand Year Lotus"]=6 },
+
+-- Heavenly
+["Heavenly Spirit Pill"] = { ["Heavenly Spirit Vine"]=2, ["Starlight Dew Herb"]=3, ["Moonlight Jade Leaf"]=1 }
 
 }
 
