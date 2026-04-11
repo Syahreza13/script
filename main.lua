@@ -6,9 +6,9 @@ game:HttpGet('https://sirius.menu/rayfield')
 
 local Window = Rayfield:CreateWindow({
 
-Name = "SR13 FINAL TRUE FIX",
+Name = "SR13 STABLE",
 LoadingTitle = "Loading...",
-LoadingSubtitle = "Smart Lock + True Timer",
+LoadingSubtitle = "Retry Same Recipe",
 ConfigurationSaving = {Enabled = false}
 
 })
@@ -106,7 +106,7 @@ end
 end)
 
 --------------------------------------------------
--- TRUE TIMER DETECTOR (FINAL)
+-- TIMER DETECTOR (FINAL STABLE)
 --------------------------------------------------
 
 local WaitFrame =
@@ -118,17 +118,14 @@ player.PlayerGui
 local timerLabel =
 WaitFrame:WaitForChild("Time")
 
-local lastTimerValue=0
-local lastChangeTime=tick()
+local lastTimer=0
+local lastChange=tick()
 
-local function getTimerValue()
+local function getTimer()
 
 local txt=timerLabel.Text
 
-if not txt then return 0 end
-
 local num=
-
 tonumber(
 string.match(txt,"%-?[%d%.]+")
 )
@@ -143,30 +140,26 @@ end
 
 local function isTimerRunning()
 
--- jika frame tidak terlihat → idle
 if WaitFrame.Visible==false then
 return false
 end
 
-local current=getTimerValue()
+local current=getTimer()
 
--- timer <=0 → idle
 if current<=0 then
 return false
 end
 
--- timer berubah → valid
-if current~=lastTimerValue then
+if current~=lastTimer then
 
-lastTimerValue=current
-lastChangeTime=tick()
+lastTimer=current
+lastChange=tick()
 
 return true
 
 end
 
--- timer tidak berubah lama → fake
-if tick()-lastChangeTime>3 then
+if tick()-lastChange>3 then
 return false
 end
 
@@ -311,10 +304,204 @@ local recipeList={
 }
 
 --------------------------------------------------
--- AUTO HANDCRAFT
+-- AUTO FORAGE (ASLI — TIDAK DIUBAH)
+--------------------------------------------------
+
+local AUTO_FORAGE=false
+local STATE="IDLE"
+local lastCollectTime=tick()
+
+local collectibles={
+
+"Azure Serpent Grass","Basic Herb","Bitter Jade Grass","Black Iron Root",
+"Blue Wave Coral Herb","Cloud Mist Herb","Common Spirit Grass",
+"Crimson Flame Mushroom","Dandelion of Qi","Healing Sunflower",
+"Heavenly Spirit Vine","Ironbone Grass","Moonlight Jade Leaf",
+"Mountain Green Herb","Nine Suns Flame Grass","Purple Lightning Orchid",
+"Red Ginseng","Seven Star Flower","Silverleaf Herb","Spirit Spring Herb",
+"Starlight Dew Herb","Thousand Year Lotus","Wild Bitter Grass",
+"Wild Spirit Grass","Chest"
+
+}
+
+local collectSet={}
+
+for _,v in ipairs(collectibles) do
+collectSet[v]=true
+end
+
+local function getTargetPart(item)
+
+return item:IsA("BasePart")
+and item
+or item.PrimaryPart
+or item:FindFirstChildWhichIsA("BasePart")
+
+end
+
+local function getDistance(obj)
+
+local part=getTargetPart(obj)
+
+return part
+and (root.Position-part.Position).Magnitude
+or math.huge
+
+end
+
+local function getItems()
+
+local items={}
+
+for _,obj in ipairs(Workspace:GetDescendants()) do
+
+if collectSet[obj.Name]
+and getTargetPart(obj)
+then
+
+table.insert(items,obj)
+
+end
+
+end
+
+table.sort(items,function(a,b)
+
+return getDistance(a)<getDistance(b)
+
+end)
+
+return items
+
+end
+
+local function collectItem(item)
+
+local targetPart=getTargetPart(item)
+
+local prompt=item:FindFirstChildWhichIsA(
+"ProximityPrompt",
+true
+)
+
+if not(targetPart and prompt) then return end
+
+local old=root.CFrame
+
+local offsets={
+
+Vector3.new(0,3,0),
+Vector3.new(2,2,0),
+Vector3.new(-2,2,0),
+Vector3.new(0,2,2),
+Vector3.new(0,2,-2),
+
+}
+
+for _,offset in ipairs(offsets) do
+
+root.CFrame=targetPart.CFrame+offset
+
+task.wait(0.03)
+
+prompt.RequiresLineOfSight=false
+prompt.HoldDuration=0
+
+for i=1,4 do
+
+prompt:InputHoldBegin()
+task.wait()
+prompt:InputHoldEnd()
+
+end
+
+if not item.Parent then
+
+lastCollectTime=tick()
+break
+
+end
+
+end
+
+root.CFrame=old
+
+end
+
+local function tryEnterForest()
+
+remote:FireServer(
+"Forest",
+false,
+"Create"
+)
+
+task.wait(1)
+
+return #getItems()>0
+
+end
+
+task.spawn(function()
+
+while true do
+
+if AUTO_FORAGE then
+
+if STATE=="FARM" then
+
+local items=getItems()
+
+if #items>0 then
+collectItem(items[1])
+end
+
+if tick()-lastCollectTime>10 then
+
+remote:FireServer(
+"Forest",
+false,
+"Destroy"
+)
+
+STATE="COOLDOWN"
+task.wait(2)
+
+end
+
+end
+
+if STATE=="COOLDOWN" then
+
+if tryEnterForest() then
+STATE="FARM"
+lastCollectTime=tick()
+else
+task.wait(2)
+end
+
+end
+
+if STATE=="IDLE" then
+STATE="COOLDOWN"
+end
+
+else
+task.wait(1)
+end
+
+task.wait(0.1)
+
+end
+
+end)
+
+--------------------------------------------------
+-- AUTO HANDCRAFT (RETRY SAME)
 --------------------------------------------------
 
 local AUTO_HAND=false
+local HAND_INDEX=1
 
 task.spawn(function()
 
@@ -327,16 +514,14 @@ task.wait(1)
 continue
 end
 
-for i,recipe in ipairs(recipeList) do
+local recipe=recipeList[HAND_INDEX]
 
 local recipeName=recipe[1]
 local ingredientTable=recipe[2]
 
-if not AUTO_HAND then break end
-
 if isTimerRunning() then
 
-local t=math.floor(getTimerValue())
+local t=math.floor(getTimer())
 
 print("⏱ Existing Pill Timer:",t,"S")
 
@@ -348,7 +533,7 @@ end
 
 if not canCraft(recipeName,ingredientTable) then
 
-print("⏳ Hand Missing → Retry 10s")
+print("⏳ Retry Hand in 10s")
 
 task.wait(10)
 
@@ -392,9 +577,13 @@ false,
 
 unlock()
 
-task.wait(2)
+HAND_INDEX+=1
 
+if HAND_INDEX>#recipeList then
+HAND_INDEX=1
 end
+
+task.wait(2)
 
 else
 task.wait(1)
@@ -405,10 +594,11 @@ end
 end)
 
 --------------------------------------------------
--- AUTO NPC
+-- AUTO NPC (RETRY SAME)
 --------------------------------------------------
 
 local AUTO_NPC=false
+local NPC_INDEX=1
 
 task.spawn(function()
 
@@ -421,16 +611,14 @@ task.wait(1)
 continue
 end
 
-for i,recipe in ipairs(recipeList) do
+local recipe=recipeList[NPC_INDEX]
 
 local recipeName=recipe[1]
 local ingredientTable=recipe[2]
 
-if not AUTO_NPC then break end
-
 if not canCraft(recipeName,ingredientTable) then
 
-print("⏳ NPC Missing → Retry 10s")
+print("⏳ Retry NPC in 10s")
 
 task.wait(10)
 
@@ -455,9 +643,13 @@ task.wait(3)
 
 unlock()
 
-task.wait(2)
+NPC_INDEX+=1
 
+if NPC_INDEX>#recipeList then
+NPC_INDEX=1
 end
+
+task.wait(2)
 
 else
 task.wait(1)
@@ -470,6 +662,19 @@ end)
 --------------------------------------------------
 -- UI
 --------------------------------------------------
+
+Tab:CreateToggle({
+
+Name="🌿 Auto Forage",
+CurrentValue=false,
+Callback=function(v)
+
+AUTO_FORAGE=v
+STATE="IDLE"
+
+end
+
+})
 
 Tab:CreateToggle({
 
