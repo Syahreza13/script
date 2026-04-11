@@ -6,9 +6,9 @@ game:HttpGet('https://sirius.menu/rayfield')
 
 local Window = Rayfield:CreateWindow({
 
-Name = "SR13 FINAL STABLE",
+Name = "SR13 FINAL TRUE FIX",
 LoadingTitle = "Loading...",
-LoadingSubtitle = "Smart Lock Stable",
+LoadingSubtitle = "Smart Lock + True Timer",
 ConfigurationSaving = {Enabled = false}
 
 })
@@ -106,19 +106,20 @@ end
 end)
 
 --------------------------------------------------
--- SMART TIMER DETECTOR
+-- TRUE TIMER DETECTOR (FINAL)
 --------------------------------------------------
 
-local timerLabel=
-
+local WaitFrame =
 player.PlayerGui
 :WaitForChild("ScreenGui")
 :WaitForChild("Alchemy")
 :WaitForChild("WaitFrame")
-:WaitForChild("Time")
+
+local timerLabel =
+WaitFrame:WaitForChild("Time")
 
 local lastTimerValue=0
-local lastCheckTime=tick()
+local lastChangeTime=tick()
 
 local function getTimerValue()
 
@@ -142,28 +143,34 @@ end
 
 local function isTimerRunning()
 
+-- jika frame tidak terlihat → idle
+if WaitFrame.Visible==false then
+return false
+end
+
 local current=getTimerValue()
 
+-- timer <=0 → idle
 if current<=0 then
-lastTimerValue=current
 return false
 end
 
-if current==lastTimerValue then
-
-if tick()-lastCheckTime>3 then
-return false
-end
-
-else
+-- timer berubah → valid
+if current~=lastTimerValue then
 
 lastTimerValue=current
-lastCheckTime=tick()
+lastChangeTime=tick()
+
 return true
 
 end
 
+-- timer tidak berubah lama → fake
+if tick()-lastChangeTime>3 then
 return false
+end
+
+return true
 
 end
 
@@ -248,7 +255,7 @@ return true
 end
 
 --------------------------------------------------
--- RECIPE LIST (URUT)
+-- ORDERED RECIPES
 --------------------------------------------------
 
 local recipeList={
@@ -334,6 +341,7 @@ local t=math.floor(getTimerValue())
 print("⏱ Existing Pill Timer:",t,"S")
 
 task.wait(2)
+
 continue
 
 end
