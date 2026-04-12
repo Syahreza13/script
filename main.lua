@@ -646,7 +646,7 @@ false,
 ingredientTable
 )
 
-task.wait(1)
+task.wait(0.2)
 
 remote:FireServer(
 "AlchemyController",
