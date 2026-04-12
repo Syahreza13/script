@@ -1,20 +1,16 @@
 --// LOAD RAYFIELD
-local Rayfield =
-loadstring(
-game:HttpGet('https://sirius.menu/rayfield')
-)()
+local Rayfield = loadstring(game:HttpGet(
+"https://sirius.menu/rayfield"
+))()
 
 local Window = Rayfield:CreateWindow({
-
-Name = "SR13 STABLE",
+Name = "SR13 FINAL STABLE",
 LoadingTitle = "Loading...",
-LoadingSubtitle = "Retry Same Recipe",
-ConfigurationSaving = {Enabled = false}
-
+LoadingSubtitle = "Ordered Craft System",
+ConfigurationSaving = {Enabled=false}
 })
 
-local Tab =
-Window:CreateTab("Main",4483362458)
+local Tab = Window:CreateTab("Main",4483362458)
 
 --------------------------------------------------
 -- SERVICES
@@ -46,6 +42,33 @@ VirtualUser:ClickButton2(Vector2.new())
 end)
 
 --------------------------------------------------
+-- LOOP INPUT
+--------------------------------------------------
+
+local LOOP_COUNT=1
+
+Tab:CreateInput({
+
+Name="🔁 Loop Count",
+PlaceholderText="1",
+
+Callback=function(txt)
+
+local num=tonumber(txt)
+
+if num and num>0 then
+LOOP_COUNT=math.floor(num)
+else
+LOOP_COUNT=1
+end
+
+print("🔁 Loop set:",LOOP_COUNT)
+
+end
+
+})
+
+--------------------------------------------------
 -- GLOBAL LOCK
 --------------------------------------------------
 
@@ -72,7 +95,6 @@ end
 LAST_RESULT="UNKNOWN"
 
 local resultLabel=
-
 player.PlayerGui
 :WaitForChild("ScreenGui")
 :WaitForChild("Alchemy")
@@ -106,31 +128,27 @@ end
 end)
 
 --------------------------------------------------
--- TIMER DETECTOR (FINAL STABLE)
+-- TIMER DETECTOR
 --------------------------------------------------
 
-local WaitFrame =
+local timerLabel=
 player.PlayerGui
 :WaitForChild("ScreenGui")
 :WaitForChild("Alchemy")
 :WaitForChild("WaitFrame")
+:WaitForChild("Time")
 
-local timerLabel =
-WaitFrame:WaitForChild("Time")
-
-local lastTimer=0
-local lastChange=tick()
-
-local function getTimer()
+local function getTimerValue()
 
 local txt=timerLabel.Text
 
-local num=
-tonumber(
+if not txt then return 0 end
+
+local num=tonumber(
 string.match(txt,"%-?[%d%.]+")
 )
 
-if num then
+if num and num>0 then
 return num
 end
 
@@ -140,41 +158,17 @@ end
 
 local function isTimerRunning()
 
-if WaitFrame.Visible==false then
-return false
-end
-
-local current=getTimer()
-
-if current<=0 then
-return false
-end
-
-if current~=lastTimer then
-
-lastTimer=current
-lastChange=tick()
-
-return true
-
-end
-
-if tick()-lastChange>3 then
-return false
-end
-
-return true
+return getTimerValue()>0
 
 end
 
 --------------------------------------------------
--- INGREDIENT DETECTOR
+-- INGREDIENT CHECK
 --------------------------------------------------
 
 local function getHerbCount(name)
 
 local mainFrame=
-
 player.PlayerGui
 .ScreenGui
 .Alchemy
@@ -190,8 +184,7 @@ for _,d in ipairs(child:GetDescendants()) do
 
 if d:IsA("TextLabel") then
 
-local n=
-string.match(d.Text,"%d+")
+local n=string.match(d.Text,"%d+")
 
 if n then
 return tonumber(n)
@@ -209,25 +202,19 @@ return 0
 
 end
 
---------------------------------------------------
--- SAFE canCraft
---------------------------------------------------
-
-local function canCraft(recipeName,ingredientTable)
+local function canCraft(recipeName,ingredients)
 
 local missing={}
 
-for herb,qty in pairs(ingredientTable) do
+for herb,qty in pairs(ingredients) do
 
 local have=getHerbCount(herb)
 
 if have<qty then
 
 table.insert(
-
 missing,
 herb.." ("..have.."/"..qty..")"
-
 )
 
 end
@@ -248,63 +235,44 @@ return true
 end
 
 --------------------------------------------------
--- ORDERED RECIPES
+-- RECIPES (ARRAY — URUT)
 --------------------------------------------------
 
-local recipeList={
+local recipes={
 
-{
-"Mistveil Focus Pill A",
-{["Spirit Spring Herb"]=2,
-["Azure Serpent Grass"]=1,
-["Silverleaf Herb"]=2,
-["Thousand Year Lotus"]=1}
-},
-
-{
-"Mistveil Focus Pill B",
-{["Spirit Spring Herb"]=1,
-["Blue Wave Coral Herb"]=1,
-["Cloud Mist Herb"]=3,
-["Thousand Year Lotus"]=1}
-},
-
-{
-"Mistveil Focus Pill C",
-{["Spirit Spring Herb"]=2,
-["Silverleaf Herb"]=3,
-["Starlight Dew Herb"]=1}
-},
-
-{
-"Mistveil Focus Pill D",
-{["Blue Wave Coral Herb"]=1,
+{"Mistveil Focus Pill A",{
 ["Spirit Spring Herb"]=2,
 ["Azure Serpent Grass"]=1,
-["Silverleaf Herb"]=2}
-},
+["Silverleaf Herb"]=2,
+["Thousand Year Lotus"]=1
+}},
 
-{
-"Mistveil Focus Pill E",
-{["Blue Wave Coral Herb"]=1,
-["Cloud Mist Herb"]=1,
+{"Mistveil Focus Pill B",{
 ["Spirit Spring Herb"]=1,
-["Azure Serpent Grass"]=1,
-["Silverleaf Herb"]=1,
-["Seven Star Flower"]=1}
-},
+["Blue Wave Coral Herb"]=1,
+["Cloud Mist Herb"]=3,
+["Thousand Year Lotus"]=1
+}}
 
-{
-"Heavenly Spirit Pill",
-{["Heavenly Spirit Vine"]=2,
-["Starlight Dew Herb"]=3,
-["Moonlight Jade Leaf"]=1}
-}
+-- TAMBAHKAN SEMUA RECIPE LANJUTAN DISINI
+-- JANGAN UBAH FORMAT
 
 }
+
+local RECIPE_COUNT=#recipes
 
 --------------------------------------------------
--- AUTO FORAGE (ASLI — TIDAK DIUBAH)
+-- COUNTERS
+--------------------------------------------------
+
+local HAND_DONE=0
+local NPC_DONE=0
+
+local HAND_TARGET=0
+local NPC_TARGET=0
+
+--------------------------------------------------
+-- AUTO FORAGE (FULL ASLI)
 --------------------------------------------------
 
 local AUTO_FORAGE=false
@@ -353,7 +321,9 @@ local function getItems()
 
 local items={}
 
-for _,obj in ipairs(Workspace:GetDescendants()) do
+for _,obj in ipairs(
+Workspace:GetDescendants()
+) do
 
 if collectSet[obj.Name]
 and getTargetPart(obj)
@@ -367,7 +337,9 @@ end
 
 table.sort(items,function(a,b)
 
-return getDistance(a)<getDistance(b)
+return getDistance(a)
+<
+getDistance(b)
 
 end)
 
@@ -394,13 +366,14 @@ Vector3.new(0,3,0),
 Vector3.new(2,2,0),
 Vector3.new(-2,2,0),
 Vector3.new(0,2,2),
-Vector3.new(0,2,-2),
+Vector3.new(0,2,-2)
 
 }
 
 for _,offset in ipairs(offsets) do
 
-root.CFrame=targetPart.CFrame+offset
+root.CFrame=
+targetPart.CFrame+offset
 
 task.wait(0.03)
 
@@ -453,7 +426,9 @@ if STATE=="FARM" then
 local items=getItems()
 
 if #items>0 then
+
 collectItem(items[1])
+
 end
 
 if tick()-lastCollectTime>10 then
@@ -465,6 +440,7 @@ false,
 )
 
 STATE="COOLDOWN"
+
 task.wait(2)
 
 end
@@ -474,20 +450,28 @@ end
 if STATE=="COOLDOWN" then
 
 if tryEnterForest() then
+
 STATE="FARM"
 lastCollectTime=tick()
+
 else
+
 task.wait(2)
+
 end
 
 end
 
 if STATE=="IDLE" then
+
 STATE="COOLDOWN"
+
 end
 
 else
+
 task.wait(1)
+
 end
 
 task.wait(0.1)
@@ -497,11 +481,10 @@ end
 end)
 
 --------------------------------------------------
--- AUTO HANDCRAFT (RETRY SAME)
+-- AUTO HANDCRAFT (URUT)
 --------------------------------------------------
 
 local AUTO_HAND=false
-local HAND_INDEX=1
 
 task.spawn(function()
 
@@ -509,41 +492,76 @@ while true do
 
 if AUTO_HAND then
 
+if HAND_TARGET==0 then
+
+HAND_TARGET=
+RECIPE_COUNT*LOOP_COUNT
+
+print(
+"🎯 Hand Target:",
+HAND_TARGET
+)
+
+end
+
+if HAND_DONE>=HAND_TARGET then
+
+AUTO_HAND=false
+
+Rayfield:Notify({
+
+Title="Handcraft Done",
+Content="Total Crafted: "..HAND_DONE,
+Duration=6
+
+})
+
+continue
+
+end
+
 if CRAFT_LOCK then
 task.wait(1)
 continue
 end
 
-local recipe=recipeList[HAND_INDEX]
+for i=1,RECIPE_COUNT do
+
+if not AUTO_HAND then break end
+
+local recipe=recipes[i]
 
 local recipeName=recipe[1]
 local ingredientTable=recipe[2]
 
-if isTimerRunning() then
+while not canCraft(
+recipeName,
+ingredientTable
+) do
 
-local t=math.floor(getTimer())
-
-print("⏱ Existing Pill Timer:",t,"S")
-
-task.wait(2)
-
-continue
-
-end
-
-if not canCraft(recipeName,ingredientTable) then
-
-print("⏳ Retry Hand in 10s")
+print("⏳ Retry 10s")
 
 task.wait(10)
 
-continue
+end
+
+while isTimerRunning() do
+
+print(
+"⏱ Existing:",
+getTimerValue(),"s"
+)
+
+task.wait(2)
 
 end
 
 lock("HAND")
 
-print("🛠 Handcraft →",recipeName)
+print(
+"🛠 Handcraft:",
+recipeName
+)
 
 remote:FireServer(
 "AlchemyController",
@@ -561,13 +579,9 @@ false,
 1
 )
 
-print("⏱ Waiting timer...")
-
 repeat
 task.wait(1)
 until not isTimerRunning()
-
-print("🎉 Claim Pill")
 
 remote:FireServer(
 "AlchemyController",
@@ -575,18 +589,25 @@ false,
 "finishPill"
 )
 
+HAND_DONE+=1
+
+print(
+"📊 Hand:",
+HAND_DONE,
+"/",
+HAND_TARGET
+)
+
 unlock()
-
-HAND_INDEX+=1
-
-if HAND_INDEX>#recipeList then
-HAND_INDEX=1
-end
 
 task.wait(2)
 
+end
+
 else
+
 task.wait(1)
+
 end
 
 end
@@ -594,11 +615,10 @@ end
 end)
 
 --------------------------------------------------
--- AUTO NPC (RETRY SAME)
+-- AUTO NPC (URUT)
 --------------------------------------------------
 
 local AUTO_NPC=false
-local NPC_INDEX=1
 
 task.spawn(function()
 
@@ -606,31 +626,65 @@ while true do
 
 if AUTO_NPC then
 
+if NPC_TARGET==0 then
+
+NPC_TARGET=
+RECIPE_COUNT*LOOP_COUNT
+
+print(
+"🎯 NPC Target:",
+NPC_TARGET
+)
+
+end
+
+if NPC_DONE>=NPC_TARGET then
+
+AUTO_NPC=false
+
+Rayfield:Notify({
+
+Title="NPC Done",
+Content="Total Crafted: "..NPC_DONE,
+Duration=6
+
+})
+
+continue
+
+end
+
 if CRAFT_LOCK then
 task.wait(1)
 continue
 end
 
-local recipe=recipeList[NPC_INDEX]
+for i=1,RECIPE_COUNT do
+
+if not AUTO_NPC then break end
+
+local recipe=recipes[i]
 
 local recipeName=recipe[1]
 local ingredientTable=recipe[2]
 
-if not canCraft(recipeName,ingredientTable) then
+while not canCraft(
+recipeName,
+ingredientTable
+) do
 
-print("⏳ Retry NPC in 10s")
+print("⏳ Retry 10s")
 
 task.wait(10)
-
-continue
 
 end
 
 lock("NPC")
 
-print("🧪 NPC Craft →",recipeName)
-
-LAST_RESULT="UNKNOWN"
+print(
+"🧪 NPC:",
+recipeName
+)
 
 remote:FireServer(
 "AlchemyController",
@@ -641,18 +695,25 @@ ingredientTable
 
 task.wait(3)
 
+NPC_DONE+=1
+
+print(
+"📊 NPC:",
+NPC_DONE,
+"/",
+NPC_TARGET
+)
+
 unlock()
-
-NPC_INDEX+=1
-
-if NPC_INDEX>#recipeList then
-NPC_INDEX=1
-end
 
 task.wait(2)
 
+end
+
 else
+
 task.wait(1)
+
 end
 
 end
@@ -666,7 +727,7 @@ end)
 Tab:CreateToggle({
 
 Name="🌿 Auto Forage",
-CurrentValue=false,
+
 Callback=function(v)
 
 AUTO_FORAGE=v
@@ -679,10 +740,17 @@ end
 Tab:CreateToggle({
 
 Name="🧪 Auto Alchemist",
-CurrentValue=false,
+
 Callback=function(v)
 
 AUTO_NPC=v
+
+if v then
+
+NPC_DONE=0
+NPC_TARGET=0
+
+end
 
 end
 
@@ -691,10 +759,17 @@ end
 Tab:CreateToggle({
 
 Name="🛠 Auto Handcraft",
-CurrentValue=false,
+
 Callback=function(v)
 
 AUTO_HAND=v
+
+if v then
+
+HAND_DONE=0
+HAND_TARGET=0
+
+end
 
 end
 
