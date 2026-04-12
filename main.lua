@@ -23,15 +23,13 @@ local AUTO_FORAGE = false
 local STATE = "IDLE"
 local lastCollectTime = tick()
 local forestCreated = false
-local AUTO_HAND = false
-local AUTO_NPC = false
 
 local function printMode()
     print(
         "Status:",
         "Forage = ", AUTO_FORAGE,
         "| Handcraft =", AUTO_HAND,
-        "| Alchemist =", AUTO_NPC,
+        "| Alchemist =", AUTO_NPC
     )
 end
  
@@ -65,17 +63,6 @@ local function forestHasItems()
     return false
 end
 
-local function safeEnterForest()
-    if not forestHasItems() then
-        print("🌲 Trying Enter Forest")
-        remote:FireServer(
-            "Forest",
-            false,
-            "Create"
-        )
-        task.wait(2)
-    end
-
 end
 -- ANTI AFK
 player.Idled:Connect(function()
@@ -103,8 +90,22 @@ local function unlock() CRAFT_LOCK = false; print("🔓 UNLOCKED") end
 -- RESULT DETECTOR
 -- Hanya dipakai sebagai referensi teks, deteksi utama pakai polling di NPC loop
 LAST_RESULT = "PENDING"
-local resultLabel = player.PlayerGui:WaitForChild("ScreenGui"):WaitForChild("Alchemy"):WaitForChild("SelectionFrame"):WaitForChild("Success")
- 
+local resultLabel
+task.spawn(function()
+    local ok, gui = pcall(function()
+            return player.PlayerGui
+            :WaitForChild("ScreenGui", 10)
+            :WaitForChild("Alchemy", 10)
+            :WaitForChild("SelectionFrame", 10)
+            :WaitForChild("Success", 10)
+        end)
+    if ok then
+        resultLabel = gui
+        print("ResultLabel Loaded")
+    else
+        warn("ResultLabel Not Found")
+    end
+end)
 local function getResultText()
     local ok, text = pcall(function() return resultLabel.Text end)
     return ok and text or ""
@@ -358,16 +359,17 @@ local function collectItem(item)
 end
  
 local function enterForest()
+    if forestHasItems() then
+        return
+    end
+    print("Trying enter Forest . . .")
+    remote:FireServer("Forest", false, "Create")
+    task.wait(2)
+
     if not forestHasItems() then
-        print("Trying Enter Forest . . .")
+        print("Retry Enter Forest . . .")
         remote:FireServer("Forest", false, "Create")
         task.wait(2)
-
-        if not forestHasItems() then
-            print("Foret Empty, Retrying . . .")
-            task.wait(2)
-            remote:FireServer("Forest", false, "Create")
-        end
     end
 end
  
