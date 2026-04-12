@@ -23,15 +23,6 @@ local AUTO_FORAGE = false
 local STATE = "IDLE"
 local lastCollectTime = tick()
 local forestCreated = false
-
-local function printMode()
-    print(
-        "Status:"
-        "Forage = ", AUTO_FORAGE,
-        "| Handcraft =", AUTO_HAND,
-        "| Alchemist =", AUTO_NPC,
-    )
-end
  
 local function refreshCharacter()
     character = player.Character or player.CharacterAdded:Wait()
@@ -544,9 +535,11 @@ Tab:CreateToggle({
         if v then
             AUTO_HAND = false
             AUTO_NPC = false
-            end
-            printMode()
+            print("Forage: ON")
+        else
+            print("Forage: OFF")
         end
+    end
 })
 Tab:CreateToggle({
     Name = "🛠 Auto Handcraft",
@@ -558,10 +551,12 @@ Tab:CreateToggle({
             if HAND_TARGET == 0 then
                 HAND_DONE = 0
                 HAND_INDEX = 1
-                end
             end
-            printMode()
+            print("Handcraft: ON")
+        else
+            print("Handcraft: OFF")
         end
+    end
 })
 Tab:CreateToggle({
     Name = "🧪 Auto Alchemist",
@@ -573,7 +568,9 @@ Tab:CreateToggle({
                 NPC_DONE = 0
                 NPC_INDEX = 1
             end
+            print("Alchemist: ON")
+        else
+            print("Alchemist: OFF")
         end
-            printMode()
     end
 })
