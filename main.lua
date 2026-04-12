@@ -334,7 +334,11 @@ task.spawn(function()
                 local recipe = recipes[i]
                 local recipeName, ingredientTable = recipe[1], recipe[2]
                 while not canCraft(recipeName, ingredientTable) do print("⏳ Retry 10s"); task.wait(10) end
-                while isTimerRunning() do print("⏱ Existing:", getTimerValue(), "s"); task.wait(2) end
+                local existing = getTimerValue()
+                if existing > 0 then
+                    print("⏱ Existing timer:", existing, "s — waiting...")
+                    task.wait(existing + 0.5)
+                end
                 lock("HAND")
                 print("🛠 Handcraft:", recipeName)
                 remote:FireServer("AlchemyController", false, "craft", ingredientTable)
