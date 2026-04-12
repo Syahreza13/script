@@ -63,7 +63,6 @@ local function forestHasItems()
     return false
 end
 
-end
 -- ANTI AFK
 player.Idled:Connect(function()
     VirtualUser:CaptureController()
