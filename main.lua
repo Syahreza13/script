@@ -1,7 +1,7 @@
 -- LOAD RAYFIELD
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 local Window = Rayfield:CreateWindow({
-    Name = "SR13 FINAL STABLE 2",
+    Name = "SR13 FINAL STABLE 1",
     LoadingTitle = "Loading...",
     LoadingSubtitle = "Ordered Craft System",
     ConfigurationSaving = { Enabled = false }
@@ -129,15 +129,35 @@ local function isTimerRunning() return getTimerValue() > 0 end
  
 -- INGREDIENT CHECK
 local function getHerbCount(name)
-    local mainFrame = player.PlayerGui.ScreenGui.Alchemy.SelectionFrame.lister.MainFrame
+    local gui = player:FindFirstChild("PlayerGui")
+    if not gui then return 0 end
+    local ok, mainFrame = pcall(function()
+        return gui
+            :WaitForChild("ScreenGui")
+            :WaitForChild("Alchemy")
+            :WaitForChild("SelectionFrame")
+            :WaitForChild("lister")
+            :WaitForChild("MainFrame")
+    end)
+    if not ok or not mainFrame then
+        return 0
+    end
     for _, child in ipairs(mainFrame:GetChildren()) do
-        if child.Name:lower() == name:lower() then
+
+        if string.lower(child.Name) == string.lower(name) then
+
+            local lastNumber = 0
+
             for _, d in ipairs(child:GetDescendants()) do
+
                 if d:IsA("TextLabel") then
-                    local n = string.match(d.Text, "%d+")
-                    if n then return tonumber(n) end
+
+                    for num in string.gmatch(d.Text or "", "%d+") do
+                        lastNumber = tonumber(num)
+                    end
                 end
             end
+            return lastNumber
         end
     end
     return 0
@@ -147,8 +167,20 @@ local function canCraft(recipeName, ingredients)
     local missing = {}
     for herb, qty in pairs(ingredients) do
         local have = getHerbCount(herb)
-        if have < qty then table.insert(missing, herb .. " (" .. have .. "/" .. qty .. ")") end
+        if have < qty then
+            table.insert(
+                missing,
+                herb .. " (" .. have .. "/" .. qty .. ")"
+            )
+        end
     end
+    if #missing > 0 then
+        print("❌ Missing:", recipeName)
+        print(table.concat(missing, ", "))
+        return false
+    end
+    return true
+end
     if #missing > 0 then
         print("❌ Missing:", recipeName)
         print(table.concat(missing, ", "))
@@ -459,12 +491,36 @@ task.spawn(function()
                 local recipe = recipes[i]
                 local recipeName, ingredientTable = recipe[1], recipe[2]
  
-                while not canCraft(recipeName, ingredientTable) do
-                    if not AUTO_NPC then break end
-                    print("⏳ Retry 10s:", recipeName)
-                    task.wait(10)
+                -- HARD WAIT MATERIAL
+                while true do
+
+                    if not AUTO_NPC then
+                        NPC_INDEX = i
+                        break
+                    end
+
+                    if canCraft(recipeName, ingredientTable) then
+
+                        task.wait(1)
+
+                        if canCraft(recipeName, ingredientTable) then
+                            break
+                        end
+
+                    end
+
+                    print("⏳ Waiting materials:", recipeName)
+
+                    task.wait(5)
+
                 end
-                if not AUTO_NPC then NPC_INDEX = i; break end
+
+                -- FINAL SAFETY CHECK
+                if not canCraft(recipeName, ingredientTable) then
+                    print("⚠️ Still missing — retry later:", recipeName)
+                    NPC_INDEX = i
+                    continue
+                end
  
                 lock("NPC")
                 print("🧪 NPC:", recipeName)
