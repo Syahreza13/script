@@ -32,7 +32,8 @@ local function refreshCharacter()
 end
 player.CharacterAdded:Connect(function()
     task.wait(1)
-    refreshCharacter())
+    refreshCharacter()
+end)
 
 local remote=
 ReplicatedStorage
