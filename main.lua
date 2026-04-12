@@ -70,8 +70,8 @@ local function unlock() CRAFT_LOCK = false; print("🔓 UNLOCKED") end
 LAST_RESULT = "PENDING"
 local resultLabel = player.PlayerGui:WaitForChild("ScreenGui"):WaitForChild("Alchemy"):WaitForChild("SelectionFrame"):WaitForChild("Success")
 resultLabel:GetPropertyChangedSignal("Text"):Connect(function()
-    local text = resultLabel.Text
-    if not text or text == "" then return end
+    local ok, text = pcall(function() return resultLabel.Text end)
+    if not ok or not text or text == "" then return end
     local lower = string.lower(text)
     print("📩 RESULT:", text)
     if string.find(lower, "recipe") then LAST_RESULT = "NO_RECIPE"
@@ -82,8 +82,11 @@ end)
 -- TIMER DETECTOR
 local timerLabel = player.PlayerGui:WaitForChild("ScreenGui"):WaitForChild("Alchemy"):WaitForChild("WaitFrame"):WaitForChild("Time")
 local function getTimerValue()
-    local num = tonumber(string.match(timerLabel.Text or "", "%-?[%d%.]+"))
-    return (num and num > 0) and num or 0
+    local ok, result = pcall(function()
+        return tonumber(string.match(timerLabel.Text or "", "%-?[%d%.]+"))
+    end)
+    if ok and result and result > 0 then return result end
+    return 0
 end
 local function isTimerRunning() return getTimerValue() > 0 end
 
