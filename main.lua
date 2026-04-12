@@ -7,29 +7,29 @@ local Window = Rayfield:CreateWindow({
     ConfigurationSaving = { Enabled = false }
 })
 local Tab = Window:CreateTab("Main", 4483362458)
-
+ 
 -- SERVICES
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local VirtualUser = game:GetService("VirtualUser")
-
+ 
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
 local root = character:WaitForChild("HumanoidRootPart")
-
+ 
 -- Deklarasi awal forage state (harus sebelum CharacterAdded)
 local AUTO_FORAGE = false
 local STATE = "IDLE"
 local lastCollectTime = tick()
 local forestCreated = false
-
+ 
 local function refreshCharacter()
     character = player.Character or player.CharacterAdded:Wait()
     root = character:WaitForChild("HumanoidRootPart")
     print("✅ Character Refreshed")
 end
-
+ 
 player.CharacterAdded:Connect(function()
     task.wait(1)
     refreshCharacter()
@@ -40,15 +40,15 @@ player.CharacterAdded:Connect(function()
         lastCollectTime = tick()
     end
 end)
-
+ 
 local remote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Clicked")
-
+ 
 -- ANTI AFK
 player.Idled:Connect(function()
     VirtualUser:CaptureController()
     VirtualUser:ClickButton2(Vector2.new())
 end)
-
+ 
 -- LOOP INPUT
 local LOOP_COUNT = 1
 Tab:CreateInput({
@@ -60,25 +60,40 @@ Tab:CreateInput({
         print("🔁 Loop set:", LOOP_COUNT)
     end
 })
-
+ 
 -- GLOBAL LOCK
 local CRAFT_LOCK = false
 local function lock(mode) CRAFT_LOCK = true; print("🔒 LOCKED:", mode) end
 local function unlock() CRAFT_LOCK = false; print("🔓 UNLOCKED") end
-
+ 
 -- RESULT DETECTOR
+-- Hanya dipakai sebagai referensi teks, deteksi utama pakai polling di NPC loop
 LAST_RESULT = "PENDING"
 local resultLabel = player.PlayerGui:WaitForChild("ScreenGui"):WaitForChild("Alchemy"):WaitForChild("SelectionFrame"):WaitForChild("Success")
-resultLabel:GetPropertyChangedSignal("Text"):Connect(function()
+ 
+local function getResultText()
     local ok, text = pcall(function() return resultLabel.Text end)
-    if not ok or not text or text == "" then return end
-    local lower = string.lower(text)
-    print("📩 RESULT:", text)
-    if string.find(lower, "recipe") then LAST_RESULT = "NO_RECIPE"
-    elseif string.find(lower, "spirit") then LAST_RESULT = "NO_STONE"
-    else LAST_RESULT = "SUCCESS" end
-end)
-
+    return ok and text or ""
+end
+ 
+local function waitForResult(textBefore, timeoutSec)
+    local deadline = tick() + timeoutSec
+    while tick() < deadline do
+        if not AUTO_NPC then return "CANCELLED" end
+        task.wait(0.2)
+        local ok, current = pcall(function() return resultLabel.Text end)
+        if not ok then continue end
+        -- Cek perubahan teks (signal mungkin tidak fire jika teks sama)
+        if current ~= textBefore and current ~= "" then
+            local lower = string.lower(current)
+            if string.find(lower, "recipe") then return "NO_RECIPE"
+            elseif string.find(lower, "spirit") then return "NO_STONE"
+            else return "SUCCESS" end
+        end
+    end
+    return "TIMEOUT"
+end
+ 
 -- TIMER DETECTOR
 local timerLabel = player.PlayerGui:WaitForChild("ScreenGui"):WaitForChild("Alchemy"):WaitForChild("WaitFrame"):WaitForChild("Time")
 local function getTimerValue()
@@ -89,7 +104,7 @@ local function getTimerValue()
     return 0
 end
 local function isTimerRunning() return getTimerValue() > 0 end
-
+ 
 -- INGREDIENT CHECK
 local function getHerbCount(name)
     local mainFrame = player.PlayerGui.ScreenGui.Alchemy.SelectionFrame.lister.MainFrame
@@ -105,7 +120,7 @@ local function getHerbCount(name)
     end
     return 0
 end
-
+ 
 local function canCraft(recipeName, ingredients)
     local missing = {}
     for herb, qty in pairs(ingredients) do
@@ -119,7 +134,7 @@ local function canCraft(recipeName, ingredients)
     end
     return true
 end
-
+ 
 -- RECIPES
 local recipes = {
     -- Mistveil Focus Pill
@@ -201,13 +216,13 @@ local recipes = {
     {"Lotus Nirvana Pill", {["Thousand Year Lotus"]=6}},
     {"Heavenly Spirit Pill", {["Heavenly Spirit Vine"]=2,["Starlight Dew Herb"]=3,["Moonlight Jade Leaf"]=1}},
 }
-
+ 
 local RECIPE_COUNT = #recipes
-
+ 
 -- COUNTERS
 local HAND_DONE, NPC_DONE = 0, 0
 local HAND_TARGET, NPC_TARGET = 0, 0
-
+ 
 -- AUTO FORAGE
 local collectibles = {
     "Azure Serpent Grass","Basic Herb","Bitter Jade Grass","Black Iron Root",
@@ -219,21 +234,21 @@ local collectibles = {
     "Starlight Dew Herb","Thousand Year Lotus","Wild Bitter Grass",
     "Wild Spirit Grass","Chest"
 }
-
+ 
 local collectSet = {}
 for _, v in ipairs(collectibles) do collectSet[v] = true end
-
+ 
 local function getTargetPart(item)
     return item:IsA("BasePart") and item
         or item.PrimaryPart
         or item:FindFirstChildWhichIsA("BasePart")
 end
-
+ 
 local function getDistance(obj)
     local part = getTargetPart(obj)
     return part and (root.Position - part.Position).Magnitude or math.huge
 end
-
+ 
 local function getItems()
     local items = {}
     for _, obj in ipairs(Workspace:GetDescendants()) do
@@ -244,7 +259,7 @@ local function getItems()
     table.sort(items, function(a, b) return getDistance(a) < getDistance(b) end)
     return items
 end
-
+ 
 local function collectItem(item)
     local targetPart = getTargetPart(item)
     local prompt = item:FindFirstChildWhichIsA("ProximityPrompt", true)
@@ -267,7 +282,7 @@ local function collectItem(item)
     end
     root.CFrame = old
 end
-
+ 
 local function enterForest()
     -- Hanya fire Create sekali, tidak berulang
     if not forestCreated then
@@ -277,22 +292,22 @@ local function enterForest()
         task.wait(3) -- Beri waktu server untuk spawn item
     end
 end
-
+ 
 local function destroyForest()
     remote:FireServer("Forest", false, "Destroy")
     forestCreated = false
     print("🌲 Forest Destroyed")
 end
-
+ 
 local cooldownStart = 0
-
+ 
 task.spawn(function()
     while true do
         if AUTO_FORAGE then
             if STATE == "IDLE" then
                 STATE = "COOLDOWN"
                 cooldownStart = tick()
-
+ 
             elseif STATE == "COOLDOWN" then
                 enterForest()
                 local items = getItems()
@@ -301,17 +316,12 @@ task.spawn(function()
                     lastCollectTime = tick()
                     STATE = "FARM"
                 else
-                    -- Jika sudah terlalu lama di COOLDOWN, paksa re-Create
-                    if tick() - cooldownStart > 15 then
-                        print("⚠️ Stuck in COOLDOWN — force re-create forest")
-                        forestCreated = false
-                        cooldownStart = tick()
-                    else
-                        print("⏳ Waiting for items to spawn...")
-                        task.wait(2)
-                    end
+                    -- Tunggu saja, jangan paksa re-create karena ada cooldown server
+                    local elapsed = math.floor(tick() - cooldownStart)
+                    print("⏳ Waiting for forest cooldown... (" .. elapsed .. "s)")
+                    task.wait(3)
                 end
-
+ 
             elseif STATE == "FARM" then
                 local items = getItems()
                 if #items > 0 then
@@ -335,7 +345,7 @@ task.spawn(function()
         task.wait(0.1)
     end
 end)
-
+ 
 -- AUTO HANDCRAFT
 local AUTO_HAND = false
 local HAND_INDEX = 1  -- Simpan posisi recipe terakhir
@@ -358,39 +368,39 @@ task.spawn(function()
                     HAND_INDEX = i  -- Simpan posisi saat toggle dimatikan
                     break
                 end
-
+ 
                 local recipe = recipes[i]
                 local recipeName, ingredientTable = recipe[1], recipe[2]
-
+ 
                 while not canCraft(recipeName, ingredientTable) do
                     if not AUTO_HAND then break end
                     print("⏳ Retry 10s:", recipeName)
                     task.wait(10)
                 end
                 if not AUTO_HAND then HAND_INDEX = i; break end
-
+ 
                 local existing = getTimerValue()
                 if existing > 0 then
                     print("⏱ Existing timer:", existing, "s — waiting...")
                     task.wait(existing + 0.5)
                 end
                 if not AUTO_HAND then HAND_INDEX = i; break end
-
+ 
                 lock("HAND")
                 print("🛠 Handcraft:", recipeName)
                 remote:FireServer("AlchemyController", false, "craft", ingredientTable)
                 task.wait(0.2)
                 if not AUTO_HAND then HAND_INDEX = i; unlock(); break end
-
+ 
                 remote:FireServer("AlchemyController", false, "mixing", 1)
                 repeat task.wait(1) until not isTimerRunning() or not AUTO_HAND
                 if not AUTO_HAND then HAND_INDEX = i; unlock(); break end
-
+ 
                 remote:FireServer("AlchemyController", false, "finishPill")
                 HAND_DONE += 1
                 print("📊 Hand:", HAND_DONE, "/", HAND_TARGET)
                 unlock()
-
+ 
                 -- Jika sudah selesai 1 putaran, reset index untuk putaran berikutnya
                 if i == RECIPE_COUNT then HAND_INDEX = 1 end
                 task.wait(2)
@@ -400,7 +410,7 @@ task.spawn(function()
         end
     end
 end)
-
+ 
 -- AUTO NPC
 local AUTO_NPC = false
 local NPC_INDEX = 1  -- Simpan posisi recipe terakhir
@@ -423,39 +433,41 @@ task.spawn(function()
                     NPC_INDEX = i  -- Simpan posisi saat toggle dimatikan
                     break
                 end
-
+ 
                 local recipe = recipes[i]
                 local recipeName, ingredientTable = recipe[1], recipe[2]
-
+ 
                 while not canCraft(recipeName, ingredientTable) do
                     if not AUTO_NPC then break end
                     print("⏳ Retry 10s:", recipeName)
                     task.wait(10)
                 end
                 if not AUTO_NPC then NPC_INDEX = i; break end
-
+ 
                 lock("NPC")
                 print("🧪 NPC:", recipeName)
-                LAST_RESULT = "PENDING"
+ 
+                -- Simpan teks sebelum craft untuk deteksi perubahan
+                local textBefore = getResultText()
                 remote:FireServer("AlchemyController", false, "alchemist", ingredientTable)
-
-                local timeout = tick()
-                repeat
-                    task.wait(0.2)
-                until LAST_RESULT ~= "PENDING" or tick() - timeout > 5 or not AUTO_NPC
+ 
+                local result = waitForResult(textBefore, 5)
                 if not AUTO_NPC then NPC_INDEX = i; unlock(); break end
-
-                if LAST_RESULT == "SUCCESS" then
+ 
+                if result == "SUCCESS" then
                     NPC_DONE += 1
                     print("✅ NPC Craft OK:", recipeName, "| Total:", NPC_DONE, "/", NPC_TARGET)
-                elseif LAST_RESULT == "NO_RECIPE" then
+                elseif result == "NO_RECIPE" then
                     print("⚠️ No Recipe:", recipeName, "- Skipping")
-                elseif LAST_RESULT == "NO_STONE" then
+                elseif result == "NO_STONE" then
                     print("⚠️ No Spirit Stone:", recipeName, "- Skipping")
-                else
-                    print("⚠️ Timeout/No Response:", recipeName)
+                elseif result == "TIMEOUT" then
+                    -- Timeout bisa berarti teks tidak berubah (pill sama dg sebelumnya)
+                    -- Anggap sukses daripada skip
+                    NPC_DONE += 1
+                    print("⏱ Timeout (assumed OK):", recipeName, "| Total:", NPC_DONE, "/", NPC_TARGET)
                 end
-
+ 
                 unlock()
                 -- Jika sudah selesai 1 putaran, reset index untuk putaran berikutnya
                 if i == RECIPE_COUNT then NPC_INDEX = 1 end
@@ -466,7 +478,7 @@ task.spawn(function()
         end
     end
 end)
-
+ 
 -- UI TOGGLES
 Tab:CreateToggle({
     Name = "🌿 Auto Forage",
