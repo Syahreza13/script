@@ -85,19 +85,23 @@ return ok and t or ""
 end
 
 local function waitForResult(before,timeout)
+
 local deadline=tick()+timeout
 local lastSeen=before
+
 while tick()<deadline do
+
 if not AUTO_NPC then
 return"CANCELLED"
 end
+
 task.wait(.2)
-local ok,current=
-pcall(function()
+
+local ok,current=pcall(function()
 return resultLabel.Text
 end)
+
 if ok and current~="" then
--- kalau teks berubah
 if current~=lastSeen then
 local l=string.lower(current)
 if string.find(l,"recipe") then
@@ -110,6 +114,15 @@ end
 end
 lastSeen=current
 end
+end
+-- fallback SAFE VERSION
+local ok,timer=pcall(function()
+return getTimerValue()
+end)
+if ok and timer>0 then
+return"SUCCESS"
+end
+return"TIMEOUT"
 end
 -- fallback: cek apakah timer jalan
 if isTimerRunning() then
