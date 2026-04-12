@@ -24,6 +24,15 @@ local VirtualUser=game:GetService("VirtualUser")
 local player=Players.LocalPlayer
 local character=player.Character or player.CharacterAdded:Wait()
 local root=character:WaitForChild("HumanoidRootPart")
+local function refreshCharacter()
+    character = 
+    player.Character or player.CharacterAdded:Wait()
+    root = character:WaitForChild("HumanoidRootPart")
+    print("Character Refreshed")
+end
+player.CharacterAdded:Connect(function()
+    task.wait(1)
+    refreshCharacter())
 
 local remote=
 ReplicatedStorage
@@ -433,7 +442,11 @@ true
 )
 
 if not(targetPart and prompt) then return end
-
+if not root or not root.Parent then
+    print("Root lost - refresh")
+    refreshCharacter()
+    return
+end
 local old=root.CFrame
 
 local offsets={
@@ -508,19 +521,16 @@ collectItem(items[1])
 end
 
 if tick()-lastCollectTime>10 then
-
+    print("No Item Detected - Reset Forest")
 remote:FireServer(
 "Forest",
 false,
 "Destroy"
 )
-
 STATE="COOLDOWN"
-
 task.wait(2)
-
+refreshCharacter()
 end
-
 end
 
 if STATE=="COOLDOWN" then
