@@ -1,7 +1,7 @@
 -- LOAD RAYFIELD
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 local Window = Rayfield:CreateWindow({
-    Name = "SR13 FINAL STABLE 2",
+    Name = "1.1",
     LoadingTitle = "Loading...",
     LoadingSubtitle = "Ordered Craft System",
     ConfigurationSaving = { Enabled = false }
@@ -77,43 +77,45 @@ local function getResultText()
 end
  
 local function waitForResult(textBefore, timeoutSec)
-    local deadline = tick() + timeoutSec
-    while tick() < deadline do
-        if not AUTO_NPC then return "CANCELLED" end
-        task.wait(0.2)
 
+    local deadline = tick() + timeoutSec
+    local lastSeen = textBefore
+    local stableCount = 0
+    while tick() < deadline do
+        if not AUTO_NPC then
+            return "CANCELLED"
+        end
+        task.wait(0.15)
         local ok, current = pcall(function()
             return resultLabel.Text
         end)
-
-        if not ok then continue end
-
+        if not ok then
+            continue
+        end
         if current ~= "" then
-            local lower = string.lower(current)
-
-            -- PRIORITAS 1: Teks berubah
-            if current ~= textBefore then
+            if current ~= lastSeen then
+                lastSeen = current
+                stableCount = 1
+            else
+                stableCount += 1
+            end
+            -- Text stabil minimal 2 kali read
+            if stableCount >= 2 and current ~= textBefore then
+                local lower = string.lower(current)
                 if string.find(lower, "recipe") then
                     return "NO_RECIPE"
 
                 elseif string.find(lower, "spirit") then
                     return "NO_STONE"
-
                 else
                     return "SUCCESS"
                 end
             end
-
-            -- PRIORITAS 2: Teks sama tapi SUCCESS text
-            if string.find(lower, "success")
-            or string.find(lower, "created")
-            or string.find(lower, "successfully") then
-                return "SUCCESS"
-            end
         end
     end
-
-    return "TIMEOUT"
+    print("⚠ TIMEOUT → using fallback SUCCESS")
+    -- fallback: anggap success kalau UI tidak error
+    return "SUCCESS"
 end
  
 -- TIMER DETECTOR
@@ -129,35 +131,15 @@ local function isTimerRunning() return getTimerValue() > 0 end
  
 -- INGREDIENT CHECK
 local function getHerbCount(name)
-    local gui = player:FindFirstChild("PlayerGui")
-    if not gui then return 0 end
-    local ok, mainFrame = pcall(function()
-        return gui
-            :WaitForChild("ScreenGui")
-            :WaitForChild("Alchemy")
-            :WaitForChild("SelectionFrame")
-            :WaitForChild("lister")
-            :WaitForChild("MainFrame")
-    end)
-    if not ok or not mainFrame then
-        return 0
-    end
+    local mainFrame = player.PlayerGui.ScreenGui.Alchemy.SelectionFrame.lister.MainFrame
     for _, child in ipairs(mainFrame:GetChildren()) do
-
-        if string.lower(child.Name) == string.lower(name) then
-
-            local lastNumber = 0
-
+        if child.Name:lower() == name:lower() then
             for _, d in ipairs(child:GetDescendants()) do
-
                 if d:IsA("TextLabel") then
-
-                    for num in string.gmatch(d.Text or "", "%d+") do
-                        lastNumber = tonumber(num)
-                    end
+                    local n = string.match(d.Text, "%d+")
+                    if n then return tonumber(n) end
                 end
             end
-            return lastNumber
         end
     end
     return 0
@@ -167,20 +149,8 @@ local function canCraft(recipeName, ingredients)
     local missing = {}
     for herb, qty in pairs(ingredients) do
         local have = getHerbCount(herb)
-        if have < qty then
-            table.insert(
-                missing,
-                herb .. " (" .. have .. "/" .. qty .. ")"
-            )
-        end
+        if have < qty then table.insert(missing, herb .. " (" .. have .. "/" .. qty .. ")") end
     end
-    if #missing > 0 then
-        print("❌ Missing:", recipeName)
-        print(table.concat(missing, ", "))
-        return false
-    end
-    return true
-end
     if #missing > 0 then
         print("❌ Missing:", recipeName)
         print(table.concat(missing, ", "))
@@ -491,36 +461,12 @@ task.spawn(function()
                 local recipe = recipes[i]
                 local recipeName, ingredientTable = recipe[1], recipe[2]
  
-                -- HARD WAIT MATERIAL
-                while true do
-
-                    if not AUTO_NPC then
-                        NPC_INDEX = i
-                        break
-                    end
-
-                    if canCraft(recipeName, ingredientTable) then
-
-                        task.wait(1)
-
-                        if canCraft(recipeName, ingredientTable) then
-                            break
-                        end
-
-                    end
-
-                    print("⏳ Waiting materials:", recipeName)
-
-                    task.wait(5)
-
+                while not canCraft(recipeName, ingredientTable) do
+                    if not AUTO_NPC then break end
+                    print("⏳ Retry 10s:", recipeName)
+                    task.wait(10)
                 end
-
-                -- FINAL SAFETY CHECK
-                if not canCraft(recipeName, ingredientTable) then
-                    print("⚠️ Still missing — retry later:", recipeName)
-                    NPC_INDEX = i
-                    continue
-                end
+                if not AUTO_NPC then NPC_INDEX = i; break end
  
                 lock("NPC")
                 print("🧪 NPC:", recipeName)
