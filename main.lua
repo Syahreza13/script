@@ -1,7 +1,7 @@
 -- LOAD RAYFIELD
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 local Window = Rayfield:CreateWindow({
-    Name = "1.3",
+    Name = "SR13 FINAL STABLE",
     LoadingTitle = "Loading...",
     LoadingSubtitle = "Ordered Craft System",
     ConfigurationSaving = { Enabled = false }
@@ -42,45 +42,30 @@ player.CharacterAdded:Connect(function()
 end)
  
 local remote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Clicked")
+-- SAFE FOREST CONTROL (REAL DETECTION)
+local function forestHasItems()
+    for _, obj in ipairs(Workspace:GetDescendants()) do
+        if obj.Name == "Azure Serpent Grass"
+        or obj.Name == "Cloud Mist Herb"
+        or obj.Name == "Chest" then
+            return true
+        end
+    end
+    return false
+end
 
--- MAP MODE CONTROL
-
-local CURRENT_MODE = "TOWN"
-local function goForest()
-    if CURRENT_MODE ~= "FOREST" then
-        print("🌲 Switching → Forest")
+local function safeEnterForest()
+    if not forestHasItems() then
+        print("🌲 Trying Enter Forest")
         remote:FireServer(
             "Forest",
             false,
             "Create"
         )
-        CURRENT_MODE = "FOREST"
         task.wait(2)
     end
-end
 
-local function goTown()
-    if CURRENT_MODE ~= "TOWN" then
-        print("🏠 Switching → Town")
-        remote:FireServer(
-            "Forest",
-            false,
-            "Destroy"
-        )
-        CURRENT_MODE = "TOWN"
-        task.wait(2)
-    end
 end
-task.spawn(function()
-    while true do
-        if AUTO_FORAGE then
-            goForest()
-        elseif AUTO_HAND or AUTO_NPC then
-            goTown()
-        end
-        task.wait(1)
-    end
-end)
 -- ANTI AFK
 player.Idled:Connect(function()
     VirtualUser:CaptureController()
@@ -547,30 +532,45 @@ Tab:CreateToggle({
     Callback = function(v)
         AUTO_FORAGE = v
         STATE = "IDLE"
-        forestCreated = false
-    end
-})
-Tab:CreateToggle({
-    Name = "🧪 Auto Alchemist",
-    Callback = function(v)
-        AUTO_NPC = v
-        if v and NPC_TARGET == 0 then
-            -- Fresh start: reset semua
-            NPC_DONE = 0
-            NPC_INDEX = 1
+        if v then
+            AUTO_HAND = false
+            AUTO_NPC = false
+            print("Forage: ON")
+        else
+            print("Forage: OFF")
         end
-        -- Jika toggle ON setelah pause, lanjut dari NPC_INDEX terakhir
     end
 })
 Tab:CreateToggle({
     Name = "🛠 Auto Handcraft",
     Callback = function(v)
         AUTO_HAND = v
-        if v and HAND_TARGET == 0 then
-            -- Fresh start: reset semua
-            HAND_DONE = 0
-            HAND_INDEX = 1
+        if v then 
+            AUTO_FORAGE = false
+
+            if HAND_TARGET == 0 then
+                HAND_DONE = 0
+                HAND_INDEX = 1
+            end
+            print("Handcraft: ON")
+        else
+            print("Handcraft: OFF")
         end
-        -- Jika toggle ON setelah pause, lanjut dari HAND_INDEX terakhir
+    end
+})
+Tab:CreateToggle({
+    Name = "🧪 Auto Alchemist",
+    Callback = function(v)
+        AUTO_NPC = v
+        if v then 
+            AUTO_FORAGE = false
+            if NPC_TARGET == 0 then
+                NPC_DONE = 0
+                NPC_INDEX = 1
+            end
+            print("Alchemist: ON")
+        else
+            print("Alchemist: OFF")
+        end
     end
 })
