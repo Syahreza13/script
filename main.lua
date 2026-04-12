@@ -23,6 +23,8 @@ local AUTO_FORAGE = false
 local STATE = "IDLE"
 local lastCollectTime = tick()
 local forestCreated = false
+local AUTO_HAND = false
+local AUTO_NPC = false
 
 local function printMode()
     print(
@@ -426,7 +428,6 @@ task.spawn(function()
 end)
  
 -- AUTO HANDCRAFT
-local AUTO_HAND = false
 local HAND_INDEX = 1  -- Simpan posisi recipe terakhir
 task.spawn(function()
     while true do
@@ -491,7 +492,6 @@ task.spawn(function()
 end)
  
 -- AUTO NPC
-local AUTO_NPC = false
 local NPC_INDEX = 1  -- Simpan posisi recipe terakhir
 task.spawn(function()
     while true do
