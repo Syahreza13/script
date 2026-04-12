@@ -51,7 +51,7 @@ local function lock(mode) CRAFT_LOCK = true; print("🔒 LOCKED:", mode) end
 local function unlock() CRAFT_LOCK = false; print("🔓 UNLOCKED") end
 
 -- RESULT DETECTOR
-LAST_RESULT = "UNKNOWN"
+LAST_RESULT = "PENDING"
 local resultLabel = player.PlayerGui:WaitForChild("ScreenGui"):WaitForChild("Alchemy"):WaitForChild("SelectionFrame"):WaitForChild("Success")
 resultLabel:GetPropertyChangedSignal("Text"):Connect(function()
     local text = resultLabel.Text
@@ -253,32 +253,61 @@ local function collectItem(item)
     root.CFrame = old
 end
 
-local function tryEnterForest()
-    remote:FireServer("Forest", false, "Create")
-    task.wait(1)
-    return #getItems() > 0
+local forestCreated = false
+
+local function enterForest()
+    -- Hanya fire Create sekali, tidak berulang
+    if not forestCreated then
+        print("🌲 Creating Forest...")
+        remote:FireServer("Forest", false, "Create")
+        forestCreated = true
+        task.wait(3) -- Beri waktu server untuk spawn item
+    end
+end
+
+local function destroyForest()
+    remote:FireServer("Forest", false, "Destroy")
+    forestCreated = false
+    print("🌲 Forest Destroyed")
 end
 
 task.spawn(function()
     while true do
         if AUTO_FORAGE then
-            if STATE == "FARM" then
+            if STATE == "IDLE" then
+                STATE = "COOLDOWN"
+
+            elseif STATE == "COOLDOWN" then
+                enterForest()
                 local items = getItems()
-                if #items > 0 then collectItem(items[1]) end
-                if tick() - lastCollectTime > 10 then
-                    print("No Item Detected - Reset Forest")
-                    remote:FireServer("Forest", false, "Destroy")
-                    STATE = "COOLDOWN"
+                if #items > 0 then
+                    print("🌿 Items found, start farming!")
+                    lastCollectTime = tick()
+                    STATE = "FARM"
+                else
+                    -- Item belum muncul, tunggu tanpa fire Create lagi
+                    print("⏳ Waiting for items to spawn...")
                     task.wait(2)
+                end
+
+            elseif STATE == "FARM" then
+                local items = getItems()
+                if #items > 0 then
+                    collectItem(items[1])
+                    lastCollectTime = tick() -- Update setiap ada item yang dicoba
+                end
+                if tick() - lastCollectTime > 12 then
+                    print("⚠️ No items collected for 12s - Resetting Forest")
+                    destroyForest()
+                    STATE = "COOLDOWN"
+                    task.wait(3)
                     refreshCharacter()
+                    lastCollectTime = tick() -- Reset timer setelah masuk ulang
                 end
             end
-            if STATE == "COOLDOWN" then
-                if tryEnterForest() then STATE = "FARM"; lastCollectTime = tick()
-                else task.wait(2) end
-            end
-            if STATE == "IDLE" then STATE = "COOLDOWN" end
         else
+            STATE = "IDLE"
+            forestCreated = false
             task.wait(1)
         end
         task.wait(0.1)
@@ -346,12 +375,30 @@ task.spawn(function()
                 while not canCraft(recipeName, ingredientTable) do print("⏳ Retry 10s"); task.wait(10) end
                 lock("NPC")
                 print("🧪 NPC:", recipeName)
+
+                -- Reset result sebelum craft, lalu tunggu konfirmasi dari server
+                LAST_RESULT = "PENDING"
                 remote:FireServer("AlchemyController", false, "alchemist", ingredientTable)
-                task.wait(3)
-                NPC_DONE += 1
-                print("📊 NPC:", NPC_DONE, "/", NPC_TARGET)
+
+                -- Tunggu sampai server merespons (max 5 detik)
+                local timeout = tick()
+                repeat
+                    task.wait(0.2)
+                until LAST_RESULT ~= "PENDING" or tick() - timeout > 5
+
+                if LAST_RESULT == "SUCCESS" then
+                    NPC_DONE += 1
+                    print("✅ NPC Craft OK:", recipeName, "| Total:", NPC_DONE, "/", NPC_TARGET)
+                elseif LAST_RESULT == "NO_RECIPE" then
+                    print("⚠️ No Recipe:", recipeName, "- Skipping")
+                elseif LAST_RESULT == "NO_STONE" then
+                    print("⚠️ No Spirit Stone:", recipeName, "- Skipping")
+                else
+                    print("⚠️ Timeout/No Response:", recipeName)
+                end
+
                 unlock()
-                task.wait(2)
+                task.wait(1) -- Jeda antar craft agar notif game tidak ter-skip
             end
         else
             task.wait(1)
@@ -362,7 +409,11 @@ end)
 -- UI TOGGLES
 Tab:CreateToggle({
     Name = "🌿 Auto Forage",
-    Callback = function(v) AUTO_FORAGE = v; STATE = "IDLE" end
+    Callback = function(v)
+        AUTO_FORAGE = v
+        STATE = "IDLE"
+        forestCreated = false
+    end
 })
 Tab:CreateToggle({
     Name = "🧪 Auto Alchemist",
