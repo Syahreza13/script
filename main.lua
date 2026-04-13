@@ -1,7 +1,7 @@
 -- LOAD RAYFIELD
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 local Window = Rayfield:CreateWindow({
-    Name = "1.5",
+    Name = "1.6",
     LoadingTitle = "Loading...",
     LoadingSubtitle = "Ordered Craft System",
     ConfigurationSaving = { Enabled = false }
@@ -179,10 +179,32 @@ end
 -- ════════════════════════════════════════════════════════════
 -- FOREST NAVIGATION
 -- ════════════════════════════════════════════════════════════
+-- Solusi kematian saat Destroy:
+--   1. Anchor HumanoidRootPart → player tidak kena physics, tidak jatuh
+--   2. Fire Destroy → forest dihapus server
+--   3. Tunggu server selesai unload
+--   4. Unanchor kembali
 local function leaveForest()
-    print("🚪 Leaving Forest...")
+    print("🚪 Anchoring player before Destroy...")
+
+    -- Anchor: player jadi static, tidak bisa jatuh walau lantai hilang
+    if root and root.Parent then
+        root.Anchored = true
+    end
+    task.wait(0.2)
+
+    print("🌲 Destroying Forest...")
     remote:FireServer("Forest", false, "Destroy")
-    task.wait(2)
+
+    -- Tunggu server selesai unload forest
+    task.wait(3)
+
+    -- Unanchor kembali agar player bisa bergerak normal
+    if root and root.Parent then
+        root.Anchored = false
+    end
+    print("✅ Forest destroyed, player released")
+    task.wait(0.5)
 end
 
 -- ════════════════════════════════════════════════════════════
