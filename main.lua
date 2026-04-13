@@ -1,7 +1,7 @@
 -- LOAD RAYFIELD
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 local Window = Rayfield:CreateWindow({
-    Name = "1.6",
+    Name = "1.7 PLS FINAL",
     LoadingTitle = "Loading...",
     LoadingSubtitle = "Ordered Craft System",
     ConfigurationSaving = { Enabled = false }
@@ -23,7 +23,7 @@ local AUTO_HAND   = false
 local AUTO_NPC    = false
 
 local function printMode()
-    print("Status: Forage =", AUTO_FORAGE, "| Handcraft =", AUTO_HAND, "| Alchemist =", AUTO_NPC)
+    -- status print dihapus per request
 end
 
 -- CHARACTER REFRESH
@@ -138,43 +138,7 @@ local function isTimerRunning()
     return getTimerValue() > 0
 end
 
--- ════════════════════════════════════════════════════════════
--- FOREST COOLDOWN — HANYA DARI UI
--- Path: PlayerGui → ScreenGui → Notifications → WideNotify
---       → Holder → VisualFrame → TextLabel
--- Format: "Wait for X more seconds!"
--- Semua metode lain (ReplicaSet hook, dll) TIDAK DIGUNAKAN.
--- ════════════════════════════════════════════════════════════
-local function getForestCooldown()
-    local ok, seconds = pcall(function()
-        local gui    = player.PlayerGui.ScreenGui
-        local notif  = gui:FindFirstChild("Notifications") or gui:FindFirstChild("WideNotify")
-        if not notif then return 0 end
-        local wide   = notif:FindFirstChild("WideNotify") or notif
-        local holder = wide:FindFirstChild("Holder")
-        if not holder then return 0 end
-        local vf     = holder:FindFirstChild("VisualFrame")
-        if not vf    then return 0 end
-        local lbl    = vf:FindFirstChild("TextLabel")
-        if not lbl   then return 0 end
-        local n = string.match(lbl.Text or "", "Wait for (%d+) more seconds!")
-        return tonumber(n) or 0
-    end)
-    return (ok and seconds) or 0
-end
 
--- Poll sampai cooldown habis atau timeout 120s
-local function waitForestCooldown()
-    local deadline = tick() + 120
-    while tick() < deadline do
-        local cd = getForestCooldown()
-        if cd <= 0 then return true end
-        print("⏳ Forest Cooldown:", cd, "s")
-        task.wait(math.min(cd, 5))
-    end
-    print("⚠ Cooldown wait timeout")
-    return false
-end
 
 -- ════════════════════════════════════════════════════════════
 -- FOREST NAVIGATION
@@ -487,8 +451,8 @@ local function runNPCCraftPass()
         print("🧪 NPC:", recipeName)
         local textBefore = getResultText()
         remote:FireServer("AlchemyController", false, "alchemist", ingredientTable)
-        task.wait(0.5)
-        local result = waitForResult(textBefore, 10)
+        task.wait(1.5) -- diperlambat agar notif Pill Success sempat diterima
+        local result = waitForResult(textBefore, 15) -- timeout diperpanjang juga
 
         if not AUTO_NPC then unlock(); break end
 
@@ -514,106 +478,93 @@ local function runNPCCraftPass()
             unlock(); break
         end
 
-        task.wait(1)
+        task.wait(2) -- jeda antar recipe diperpanjang
     end
     print("🧪 [NPC] Pass done. Total:", NPC_DONE)
 end
 
 -- ════════════════════════════════════════════════════════════
--- MASTER ORCHESTRATOR
--- Flow Forage ON:
---   Enter Forest → Collect → Destroy → Trigger CD (baca UI) →
---   Hand Pass → NPC Pass → Tunggu sisa CD → Repeat
--- Flow Standalone:
---   Hand / NPC loop sampai target tercapai
+-- LOOP FORAGE — berjalan independen, spam try every 5s
 -- ════════════════════════════════════════════════════════════
 task.spawn(function()
     while true do
         task.wait(0.5)
+        if not AUTO_FORAGE then task.wait(1); continue end
 
-        -- ── MODE FORAGE ───────────────────────────────────────────
-        if AUTO_FORAGE then
+        -- Coba masuk forest (jika cooldown, server akan tolak — tidak crash)
+        print("🌿 Trying to enter forest...")
+        remote:FireServer("Forest", false, "Create")
+        task.wait(3) -- tunggu server response / load
 
-            -- FASE 1: Masuk Forest
-            print("🌿 Entering forest...")
-            remote:FireServer("Forest", false, "Create")
-            task.wait(3)
+        -- Tunggu items muncul max 8s
+        local waitItems = tick() + 8
+        repeat task.wait(1) until forestHasItems() or tick() > waitItems
 
-            local waitItems = tick() + 10
-            repeat task.wait(1) until forestHasItems() or tick() > waitItems
-
-            -- FASE 2: Collect semua item
-            if forestHasItems() then
-                print("📦 Collecting items...")
-                while forestHasItems() and AUTO_FORAGE do
-                    local items = getItems()
-                    if #items == 0 then break end
-                    for _, item in ipairs(items) do
-                        if not AUTO_FORAGE then break end
-                        collectItem(item)
-                        task.wait(0.1)
-                    end
-                    task.wait(0.3)
+        if forestHasItems() then
+            -- Collect semua
+            print("📦 Collecting...")
+            while forestHasItems() and AUTO_FORAGE do
+                local items = getItems()
+                if #items == 0 then break end
+                for _, item in ipairs(items) do
+                    if not AUTO_FORAGE then break end
+                    collectItem(item)
+                    task.wait(0.1)
                 end
-                print("✅ Collect done")
-            else
-                print("⚠ Forest empty / failed to load")
+                task.wait(0.3)
             end
-
-            if not AUTO_FORAGE then continue end
-
-            -- FASE 3: Keluar Forest
+            print("✅ Collect done — leaving forest")
             leaveForest()
+            -- Setelah leave, tunggu 5s sebelum coba masuk lagi
+            task.wait(5)
+        else
+            -- Forest tidak muncul = masih cooldown, coba lagi 5s
+            print("⏳ Forest not ready — retry in 5s")
+            task.wait(5)
+        end
+    end
+end)
 
-            -- FASE 4: Trigger masuk → baca cooldown dari UI
-            print("🔍 Triggering cooldown check...")
-            remote:FireServer("Forest", false, "Create")
-            task.wait(1.5) -- tunggu notif UI muncul
-            local cd = getForestCooldown()
-            print("⏳ Forest cooldown:", cd > 0 and (cd .. "s") or "none")
+-- ════════════════════════════════════════════════════════════
+-- LOOP HAND CRAFT — berjalan independen
+-- ════════════════════════════════════════════════════════════
+task.spawn(function()
+    while true do
+        task.wait(0.5)
+        if not AUTO_HAND then task.wait(1); continue end
 
-            -- FASE 5: Craft (Hand dulu → NPC)
-            if AUTO_HAND then runHandCraftPass() end
-            if AUTO_NPC  then runNPCCraftPass()  end
+        if HAND_TARGET == 0 then
+            HAND_TARGET = RECIPE_COUNT * LOOP_COUNT
+            print("🎯 Hand Target:", HAND_TARGET)
+        end
 
-            -- FASE 6: Tunggu sisa cooldown jika craft selesai lebih cepat
-            local remaining = getForestCooldown()
-            if remaining > 0 then
-                print("⌛ Craft done early, waiting cooldown:", remaining, "s")
-                waitForestCooldown()
-                task.wait(1) -- +1s buffer setelah CD habis
-            end
+        if HAND_DONE < HAND_TARGET then
+            runHandCraftPass()
+        else
+            AUTO_HAND = false
+            Rayfield:Notify({Title="Handcraft Done", Content="Total: "..HAND_DONE, Duration=6})
+        end
+    end
+end)
 
-            print("🔄 Cycle complete — re-entering forest")
+-- ════════════════════════════════════════════════════════════
+-- LOOP NPC CRAFT — berjalan independen
+-- ════════════════════════════════════════════════════════════
+task.spawn(function()
+    while true do
+        task.wait(0.5)
+        if not AUTO_NPC then task.wait(1); continue end
 
-        -- ── MODE STANDALONE ───────────────────────────────────────
-        elseif AUTO_HAND or AUTO_NPC then
+        if NPC_TARGET == 0 then
+            NPC_TARGET = RECIPE_COUNT * LOOP_COUNT
+            print("🎯 NPC Target:", NPC_TARGET)
+        end
 
-            if AUTO_HAND then
-                if HAND_TARGET == 0 then
-                    HAND_TARGET = RECIPE_COUNT * LOOP_COUNT
-                    print("🎯 Hand Target:", HAND_TARGET)
-                end
-                if HAND_DONE < HAND_TARGET then
-                    runHandCraftPass()
-                else
-                    AUTO_HAND = false
-                    Rayfield:Notify({Title="Handcraft Done", Content="Total: "..HAND_DONE, Duration=6})
-                end
-            end
-
-            if AUTO_NPC then
-                if NPC_TARGET == 0 then
-                    NPC_TARGET = RECIPE_COUNT * LOOP_COUNT
-                    print("🎯 NPC Target:", NPC_TARGET)
-                end
-                if NPC_DONE < NPC_TARGET then
-                    runNPCCraftPass()
-                else
-                    AUTO_NPC = false
-                    Rayfield:Notify({Title="NPC Done", Content="Total: "..NPC_DONE, Duration=6})
-                end
-            end
+        if NPC_DONE < NPC_TARGET then
+            runNPCCraftPass()
+        else
+            AUTO_NPC = false
+            Rayfield:Notify({Title="NPC Done", Content="Total: "..NPC_DONE, Duration=6})
         end
     end
 end)
@@ -625,11 +576,6 @@ Tab:CreateToggle({
     Name = "🌿 Auto Forage",
     Callback = function(v)
         AUTO_FORAGE = v
-        if v then
-            HAND_DONE = 0; HAND_TARGET = 0
-            NPC_DONE  = 0; NPC_TARGET  = 0
-        end
-        printMode()
     end
 })
 
@@ -637,12 +583,11 @@ Tab:CreateToggle({
     Name = "🛠 Auto Handcraft",
     Callback = function(v)
         AUTO_HAND = v
-        if v and not AUTO_FORAGE then
+        if v then
             HAND_DONE   = 0
             HAND_TARGET = RECIPE_COUNT * LOOP_COUNT
             print("🎯 Hand Target:", HAND_TARGET)
         end
-        printMode()
     end
 })
 
@@ -650,11 +595,10 @@ Tab:CreateToggle({
     Name = "🧪 Auto Alchemist",
     Callback = function(v)
         AUTO_NPC = v
-        if v and not AUTO_FORAGE then
+        if v then
             NPC_DONE   = 0
             NPC_TARGET = RECIPE_COUNT * LOOP_COUNT
             print("🎯 NPC Target:", NPC_TARGET)
         end
-        printMode()
     end
 })
