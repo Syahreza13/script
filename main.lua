@@ -1,7 +1,7 @@
 -- LOAD RAYFIELD
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 local Window = Rayfield:CreateWindow({
-    Name = "1.3",
+    Name = "1.4",
     LoadingTitle = "Loading...",
     LoadingSubtitle = "Ordered Craft System",
     ConfigurationSaving = { Enabled = false }
@@ -9,13 +9,13 @@ local Window = Rayfield:CreateWindow({
 local Tab = Window:CreateTab("Main", 4483362458)
 
 -- SERVICES
-local Players = game:GetService("Players")
-local Workspace = game:GetService("Workspace")
+local Players           = game:GetService("Players")
+local Workspace         = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local VirtualUser = game:GetService("VirtualUser")
-local player = Players.LocalPlayer
-local character = player.Character or player.CharacterAdded:Wait()
-local root = character:WaitForChild("HumanoidRootPart")
+local VirtualUser       = game:GetService("VirtualUser")
+local player            = Players.LocalPlayer
+local character         = player.Character or player.CharacterAdded:Wait()
+local root              = character:WaitForChild("HumanoidRootPart")
 
 -- STATE FLAGS
 local AUTO_FORAGE = false
@@ -32,7 +32,6 @@ local function refreshCharacter()
     root = character:WaitForChild("HumanoidRootPart")
     print("✅ Character Refreshed")
 end
-
 player.CharacterAdded:Connect(function()
     task.wait(1)
     refreshCharacter()
@@ -62,11 +61,12 @@ Tab:CreateInput({
 
 -- GLOBAL LOCK
 local CRAFT_LOCK = false
-local function lock(mode)  CRAFT_LOCK = true;  print("🔒 LOCKED:", mode) end
-local function unlock()    CRAFT_LOCK = false; print("🔓 UNLOCKED") end
+local function lock(mode) CRAFT_LOCK = true;  print("🔒 LOCKED:", mode) end
+local function unlock()   CRAFT_LOCK = false; print("🔓 UNLOCKED") end
 
+-- ════════════════════════════════════════════════════════════
 -- RESULT DETECTOR (NPC)
-local LAST_RESULT = "PENDING"
+-- ════════════════════════════════════════════════════════════
 local resultLabel
 task.spawn(function()
     local ok, gui = pcall(function()
@@ -86,8 +86,8 @@ local function getResultText()
 end
 
 local function waitForResult(textBefore, timeoutSec)
-    local deadline = tick() + timeoutSec
-    local lastSeen = textBefore
+    local deadline    = tick() + timeoutSec
+    local lastSeen    = textBefore
     local stableCount = 0
     while tick() < deadline do
         if not AUTO_NPC then return "CANCELLED" end
@@ -112,7 +112,9 @@ local function waitForResult(textBefore, timeoutSec)
     return "SUCCESS"
 end
 
+-- ════════════════════════════════════════════════════════════
 -- TIMER DETECTOR (Hand)
+-- ════════════════════════════════════════════════════════════
 local timerLabel = player.PlayerGui
     :WaitForChild("ScreenGui")
     :WaitForChild("Alchemy")
@@ -131,29 +133,34 @@ local function isTimerRunning()
     return getTimerValue() > 0
 end
 
--- FOREST COOLDOWN READER
--- Path: PlayerGui → ScreenGui → Notifications/WideNotify → Holder → VisualFrame → TextLabel
+-- ════════════════════════════════════════════════════════════
+-- FOREST COOLDOWN — HANYA DARI UI
+-- Path: PlayerGui → ScreenGui → Notifications → WideNotify
+--       → Holder → VisualFrame → TextLabel
 -- Format: "Wait for X more seconds!"
+-- Semua metode lain (ReplicaSet hook, dll) TIDAK DIGUNAKAN.
+-- ════════════════════════════════════════════════════════════
 local function getForestCooldown()
     local ok, seconds = pcall(function()
-        local gui = player.PlayerGui.ScreenGui
-        local notif = gui:FindFirstChild("Notifications") or gui:FindFirstChild("WideNotify")
+        local gui    = player.PlayerGui.ScreenGui
+        local notif  = gui:FindFirstChild("Notifications") or gui:FindFirstChild("WideNotify")
         if not notif then return 0 end
-        local wide = notif:FindFirstChild("WideNotify") or notif
-        local label = wide:FindFirstChild("Holder")
-            and wide.Holder:FindFirstChild("VisualFrame")
-            and wide.Holder.VisualFrame:FindFirstChild("TextLabel")
-        if not label then return 0 end
-        local n = string.match(label.Text or "", "Wait for (%d+) more seconds!")
+        local wide   = notif:FindFirstChild("WideNotify") or notif
+        local holder = wide:FindFirstChild("Holder")
+        if not holder then return 0 end
+        local vf     = holder:FindFirstChild("VisualFrame")
+        if not vf    then return 0 end
+        local lbl    = vf:FindFirstChild("TextLabel")
+        if not lbl   then return 0 end
+        local n = string.match(lbl.Text or "", "Wait for (%d+) more seconds!")
         return tonumber(n) or 0
     end)
     return (ok and seconds) or 0
 end
 
--- Poll sampai cooldown habis atau timeout
+-- Poll sampai cooldown habis atau timeout 120s
 local function waitForestCooldown()
-    local MAX_WAIT = 120
-    local deadline = tick() + MAX_WAIT
+    local deadline = tick() + 120
     while tick() < deadline do
         local cd = getForestCooldown()
         if cd <= 0 then return true end
@@ -164,16 +171,23 @@ local function waitForestCooldown()
     return false
 end
 
+-- ════════════════════════════════════════════════════════════
 -- FOREST NAVIGATION
+-- ════════════════════════════════════════════════════════════
 local function leaveForest()
     print("🚪 Leaving Forest...")
     remote:FireServer("Forest", false, "Destroy")
     task.wait(2)
 end
 
+-- ════════════════════════════════════════════════════════════
 -- INGREDIENT CHECK
+-- ════════════════════════════════════════════════════════════
 local function getHerbCount(name)
-    local mainFrame = player.PlayerGui.ScreenGui.Alchemy.SelectionFrame.lister.MainFrame
+    local ok, mainFrame = pcall(function()
+        return player.PlayerGui.ScreenGui.Alchemy.SelectionFrame.lister.MainFrame
+    end)
+    if not ok then return 0 end
     for _, child in ipairs(mainFrame:GetChildren()) do
         if child.Name:lower() == name:lower() then
             for _, d in ipairs(child:GetDescendants()) do
@@ -187,7 +201,15 @@ local function getHerbCount(name)
     return 0
 end
 
-local function canCraft(recipeName, ingredients)
+local function canCraft(ingredients)
+    for herb, qty in pairs(ingredients) do
+        if getHerbCount(herb) < qty then return false end
+    end
+    return true
+end
+
+-- Log detail ingredient yang kurang
+local function missingLog(recipeName, ingredients)
     local missing = {}
     for herb, qty in pairs(ingredients) do
         local have = getHerbCount(herb)
@@ -196,13 +218,13 @@ local function canCraft(recipeName, ingredients)
         end
     end
     if #missing > 0 then
-        print("❌ Missing:", recipeName, "→", table.concat(missing, ", "))
-        return false
+        print("⏳ Waiting stock:", recipeName, "→", table.concat(missing, ", "))
     end
-    return true
 end
 
--- FOREST ITEM DETECTION
+-- ════════════════════════════════════════════════════════════
+-- FOREST ITEM DETECTION & COLLECTION
+-- ════════════════════════════════════════════════════════════
 local collectibles = {
     "Azure Serpent Grass","Basic Herb","Bitter Jade Grass","Black Iron Root",
     "Blue Wave Coral Herb","Cloud Mist Herb","Common Spirit Grass",
@@ -220,9 +242,7 @@ local function forestHasItems()
     for _, obj in ipairs(Workspace:GetDescendants()) do
         if obj.Name == "Azure Serpent Grass"
         or obj.Name == "Cloud Mist Herb"
-        or obj.Name == "Chest" then
-            return true
-        end
+        or obj.Name == "Chest" then return true end
     end
     return false
 end
@@ -251,14 +271,12 @@ end
 
 local function collectItem(item)
     local targetPart = getTargetPart(item)
-    local prompt = item:FindFirstChildWhichIsA("ProximityPrompt", true)
+    local prompt     = item:FindFirstChildWhichIsA("ProximityPrompt", true)
     if not (targetPart and prompt) then return end
-    if not root or not root.Parent then
-        print("Root lost - refresh"); refreshCharacter(); return
-    end
-    local old = root.CFrame
+    if not root or not root.Parent then refreshCharacter(); return end
+    local old     = root.CFrame
     local offsets = {
-        Vector3.new(0,3,0), Vector3.new(2,2,0), Vector3.new(-2,2,0),
+        Vector3.new(0,3,0),  Vector3.new(2,2,0),  Vector3.new(-2,2,0),
         Vector3.new(0,2,2),  Vector3.new(0,2,-2)
     }
     for _, offset in ipairs(offsets) do
@@ -266,13 +284,15 @@ local function collectItem(item)
         task.wait(0.03)
         prompt.RequiresLineOfSight = false
         prompt.HoldDuration = 0
-        for i = 1, 4 do prompt:InputHoldBegin(); task.wait(); prompt:InputHoldEnd() end
+        for _ = 1, 4 do prompt:InputHoldBegin(); task.wait(); prompt:InputHoldEnd() end
         if not item.Parent then break end
     end
     root.CFrame = old
 end
 
+-- ════════════════════════════════════════════════════════════
 -- RECIPES
+-- ════════════════════════════════════════════════════════════
 local recipes = {
     -- Mistveil Focus Pill
     {"Mistveil Focus Pill A", {["Spirit Spring Herb"]=2,["Azure Serpent Grass"]=1,["Silverleaf Herb"]=2,["Thousand Year Lotus"]=1}},
@@ -363,54 +383,78 @@ local HAND_TARGET, NPC_TARGET = 0, 0
 -- CRAFT RUNNERS
 -- ════════════════════════════════════════════════════════════
 
--- Hand: fire & forget, tidak tunggu timer selesai
+--[[
+  AUTO HAND — Fire & Forget
+  Aturan:
+    🔄 TUNGGU  → stok kurang: tunggu 5s, coba lagi (TIDAK skip)
+    ⏱ TUNGGU  → timer masih jalan dari craft sebelumnya: tunggu habis
+    ❌ NO WAIT → timer craft ini sendiri tidak perlu ditunggu (fire & forget)
+    ✅ SKIP    → TIDAK ADA skip pada Hand (semua recipe dicoba)
+]]
 local function runHandCraftPass()
     if not AUTO_HAND then return end
     print("🛠 [Hand] Starting pass...")
+
     for i = 1, RECIPE_COUNT do
         if not AUTO_HAND then break end
-        local recipe = recipes[i]
-        local recipeName, ingredientTable = recipe[1], recipe[2]
+        local recipeName      = recipes[i][1]
+        local ingredientTable = recipes[i][2]
 
-        if not canCraft(recipeName, ingredientTable) then
-            print("⏭ Skip (no stock):", recipeName)
-            continue
+        -- Tunggu stok (tidak skip)
+        while not canCraft(ingredientTable) do
+            if not AUTO_HAND then break end
+            missingLog(recipeName, ingredientTable)
+            task.wait(5)
         end
+        if not AUTO_HAND then break end
 
-        -- Jika timer masih jalan dari craft sebelumnya, skip recipe ini
-        if isTimerRunning() then
-            print("⏱ Timer still running, skip:", recipeName)
-            continue
+        -- Tunggu jika timer masih jalan dari craft sebelumnya
+        local existing = getTimerValue()
+        if existing > 0 then
+            print("⏱ Previous timer:", existing, "s — waiting...")
+            task.wait(existing + 0.5)
         end
+        if not AUTO_HAND then break end
 
         lock("HAND")
         print("🛠 Handcraft:", recipeName)
         remote:FireServer("AlchemyController", false, "craft", ingredientTable)
-        task.wait(0.2)
+        task.wait(0.3)
         remote:FireServer("AlchemyController", false, "mixing", 1)
-        task.wait(0.2)
-        remote:FireServer("AlchemyController", false, "finishPill") -- langsung finish, no wait
+        task.wait(2)  -- jeda minimal sebelum finish, tidak perlu tunggu timer habis
+        remote:FireServer("AlchemyController", false, "finishPill")
         HAND_DONE += 1
-        print("📊 Hand:", HAND_DONE)
+        print("📊 Hand:", HAND_DONE, "/", HAND_TARGET > 0 and tostring(HAND_TARGET) or "∞")
         unlock()
         task.wait(0.5)
     end
     print("🛠 [Hand] Pass done. Total:", HAND_DONE)
 end
 
--- NPC: sequential, tunggu konfirmasi result server
+--[[
+  AUTO NPC — Sequential, tunggu konfirmasi server
+  Aturan:
+    🔄 TUNGGU  → stok kurang: tunggu 5s, coba lagi (TIDAK skip)
+    🔄 RETRY   → NO_STONE: tunggu 10s, ulang recipe yang sama (TIDAK skip)
+    ✅ SKIP    → HANYA jika server balas NO_RECIPE
+]]
 local function runNPCCraftPass()
     if not AUTO_NPC then return end
     print("🧪 [NPC] Starting pass...")
-    for i = 1, RECIPE_COUNT do
-        if not AUTO_NPC then break end
-        local recipe = recipes[i]
-        local recipeName, ingredientTable = recipe[1], recipe[2]
 
-        if not canCraft(recipeName, ingredientTable) then
-            print("⏭ Skip (no stock):", recipeName)
-            continue
+    local i = 1
+    while i <= RECIPE_COUNT do
+        if not AUTO_NPC then break end
+        local recipeName      = recipes[i][1]
+        local ingredientTable = recipes[i][2]
+
+        -- Tunggu stok (tidak skip)
+        while not canCraft(ingredientTable) do
+            if not AUTO_NPC then break end
+            missingLog(recipeName, ingredientTable)
+            task.wait(5)
         end
+        if not AUTO_NPC then break end
 
         lock("NPC")
         print("🧪 NPC:", recipeName)
@@ -423,16 +467,26 @@ local function runNPCCraftPass()
 
         if result == "SUCCESS" or result == "TIMEOUT" then
             NPC_DONE += 1
-            print("✅ NPC OK:", recipeName, "| Total:", NPC_DONE)
+            print("✅ NPC OK:", recipeName, "| Total:", NPC_DONE, "/", NPC_TARGET > 0 and tostring(NPC_TARGET) or "∞")
+            unlock(); i += 1
+
         elseif result == "NO_RECIPE" then
-            print("⚠️ No Recipe:", recipeName, "- Skip")
+            -- Satu-satunya kondisi yang boleh skip
+            print("⏭ NO_RECIPE → Skip:", recipeName)
+            unlock(); i += 1
+
         elseif result == "NO_STONE" then
-            print("⚠️ No Spirit Stone:", recipeName, "- Skip")
+            -- Retry, jangan skip
+            print("⚠️ No Spirit Stone — retry in 10s:", recipeName)
+            unlock()
+            task.wait(10)
+            -- i tidak increment → recipe yang sama diulang
+
         elseif result == "CANCELLED" then
-            print("🛑 NPC Cancelled at:", recipeName)
+            print("🛑 NPC Cancelled")
+            unlock(); break
         end
 
-        unlock()
         task.wait(1)
     end
     print("🧪 [NPC] Pass done. Total:", NPC_DONE)
@@ -440,16 +494,17 @@ end
 
 -- ════════════════════════════════════════════════════════════
 -- MASTER ORCHESTRATOR
--- Flow (Forage ON):
---   Enter Forest → Collect All → Destroy → Trigger CD → Craft → Wait CD → Repeat
--- Flow (Standalone):
---   Hand / NPC loop biasa tanpa forest
+-- Flow Forage ON:
+--   Enter Forest → Collect → Destroy → Trigger CD (baca UI) →
+--   Hand Pass → NPC Pass → Tunggu sisa CD → Repeat
+-- Flow Standalone:
+--   Hand / NPC loop sampai target tercapai
 -- ════════════════════════════════════════════════════════════
 task.spawn(function()
     while true do
         task.wait(0.5)
 
-        -- ── MODE FORAGE (pipeline penuh) ─────────────────────────
+        -- ── MODE FORAGE ───────────────────────────────────────────
         if AUTO_FORAGE then
 
             -- FASE 1: Masuk Forest
@@ -457,11 +512,10 @@ task.spawn(function()
             remote:FireServer("Forest", false, "Create")
             task.wait(3)
 
-            -- Tunggu items muncul (max 10s)
             local waitItems = tick() + 10
             repeat task.wait(1) until forestHasItems() or tick() > waitItems
 
-            -- FASE 2: Collect semua items
+            -- FASE 2: Collect semua item
             if forestHasItems() then
                 print("📦 Collecting items...")
                 while forestHasItems() and AUTO_FORAGE do
@@ -484,31 +538,28 @@ task.spawn(function()
             -- FASE 3: Keluar Forest
             leaveForest()
 
-            -- FASE 4: Trigger masuk lagi untuk memunculkan notif cooldown
+            -- FASE 4: Trigger masuk → baca cooldown dari UI
             print("🔍 Triggering cooldown check...")
             remote:FireServer("Forest", false, "Create")
-            task.wait(1.5) -- beri waktu notif muncul
+            task.wait(1.5) -- tunggu notif UI muncul
             local cd = getForestCooldown()
-            print("⏳ Cooldown detected:", cd, "s")
+            print("⏳ Forest cooldown:", cd > 0 and (cd .. "s") or "none")
 
-            -- FASE 5: Craft selama cooldown berlangsung
-            if AUTO_HAND then
-                runHandCraftPass()
-            end
-            if AUTO_NPC then
-                runNPCCraftPass()
-            end
+            -- FASE 5: Craft (Hand dulu → NPC)
+            if AUTO_HAND then runHandCraftPass() end
+            if AUTO_NPC  then runNPCCraftPass()  end
 
-            -- FASE 6: Tunggu sisa cooldown kalau craft sudah selesai lebih cepat
+            -- FASE 6: Tunggu sisa cooldown jika craft selesai lebih cepat
             local remaining = getForestCooldown()
             if remaining > 0 then
-                print("⌛ Waiting remaining cooldown:", remaining, "s")
+                print("⌛ Craft done early, waiting cooldown:", remaining, "s")
                 waitForestCooldown()
+                task.wait(1) -- +1s buffer setelah CD habis
             end
 
             print("🔄 Cycle complete — re-entering forest")
 
-        -- ── MODE STANDALONE (tanpa Forage) ───────────────────────
+        -- ── MODE STANDALONE ───────────────────────────────────────
         elseif AUTO_HAND or AUTO_NPC then
 
             if AUTO_HAND then
@@ -548,9 +599,8 @@ Tab:CreateToggle({
     Callback = function(v)
         AUTO_FORAGE = v
         if v then
-            -- Reset semua counter saat pipeline forage dimulai
-            HAND_DONE = 0; HAND_INDEX = 1; HAND_TARGET = 0
-            NPC_DONE  = 0; NPC_INDEX  = 1; NPC_TARGET  = 0
+            HAND_DONE = 0; HAND_TARGET = 0
+            NPC_DONE  = 0; NPC_TARGET  = 0
         end
         printMode()
     end
@@ -561,7 +611,8 @@ Tab:CreateToggle({
     Callback = function(v)
         AUTO_HAND = v
         if v and not AUTO_FORAGE then
-            HAND_DONE = 0; HAND_TARGET = RECIPE_COUNT * LOOP_COUNT
+            HAND_DONE   = 0
+            HAND_TARGET = RECIPE_COUNT * LOOP_COUNT
             print("🎯 Hand Target:", HAND_TARGET)
         end
         printMode()
@@ -573,7 +624,8 @@ Tab:CreateToggle({
     Callback = function(v)
         AUTO_NPC = v
         if v and not AUTO_FORAGE then
-            NPC_DONE = 0; NPC_TARGET = RECIPE_COUNT * LOOP_COUNT
+            NPC_DONE   = 0
+            NPC_TARGET = RECIPE_COUNT * LOOP_COUNT
             print("🎯 NPC Target:", NPC_TARGET)
         end
         printMode()
