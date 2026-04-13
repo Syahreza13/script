@@ -1,7 +1,7 @@
 -- LOAD RAYFIELD
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 local Window = Rayfield:CreateWindow({
-    Name = "1.4",
+    Name = "1.5",
     LoadingTitle = "Loading...",
     LoadingSubtitle = "Ordered Craft System",
     ConfigurationSaving = { Enabled = false }
@@ -66,24 +66,24 @@ local function unlock()   CRAFT_LOCK = false; print("🔓 UNLOCKED") end
 
 -- ════════════════════════════════════════════════════════════
 -- RESULT DETECTOR (NPC)
+-- LAZY getter — dicari saat dibutuhkan, tidak di-assign saat load.
+-- Mencegah error saat UI Alchemy belum terbuka / masih di Map view.
 -- ════════════════════════════════════════════════════════════
-local resultLabel
-task.spawn(function()
-    local ok, gui = pcall(function()
-        return player.PlayerGui
-            :WaitForChild("ScreenGui", 10)
-            :WaitForChild("Alchemy", 10)
-            :WaitForChild("SelectionFrame", 10)
-            :WaitForChild("Success", 10)
+local function getResultLabel()
+    local ok, lbl = pcall(function()
+        return player.PlayerGui.ScreenGui
+            .Alchemy.SelectionFrame.Success
     end)
-    if ok then resultLabel = gui; print("ResultLabel Loaded")
-    else warn("ResultLabel Not Found") end
-end)
+    return ok and lbl or nil
+end
 
 local function getResultText()
-    local ok, text = pcall(function() return resultLabel.Text end)
+    local lbl = getResultLabel()
+    if not lbl then return "" end
+    local ok, text = pcall(function() return lbl.Text end)
     return ok and text or ""
 end
+
 
 local function waitForResult(textBefore, timeoutSec)
     local deadline    = tick() + timeoutSec
@@ -92,7 +92,9 @@ local function waitForResult(textBefore, timeoutSec)
     while tick() < deadline do
         if not AUTO_NPC then return "CANCELLED" end
         task.wait(0.15)
-        local ok, current = pcall(function() return resultLabel.Text end)
+        local lbl_ = getResultLabel()
+        if not lbl_ then task.wait(0.5); continue end
+        local ok, current = pcall(function() return lbl_.Text end)
         if not ok then continue end
         if current ~= "" then
             if current ~= lastSeen then
@@ -115,15 +117,18 @@ end
 -- ════════════════════════════════════════════════════════════
 -- TIMER DETECTOR (Hand)
 -- ════════════════════════════════════════════════════════════
-local timerLabel = player.PlayerGui
-    :WaitForChild("ScreenGui")
-    :WaitForChild("Alchemy")
-    :WaitForChild("WaitFrame")
-    :WaitForChild("Time")
-
+-- LAZY getter — tidak di-assign saat load, dicari saat dibutuhkan.
+-- Ini mencegah error "AlchemyPart2 is not a valid member" ketika
+-- UI Alchemy belum terbuka / player masih di Map/Forest view.
 local function getTimerValue()
     local ok, result = pcall(function()
-        return tonumber(string.match(timerLabel.Text or "", "%-?[%d%.]+"))
+        local lbl = player.PlayerGui
+            :FindFirstChild("ScreenGui")
+            and player.PlayerGui.ScreenGui:FindFirstChild("Alchemy")
+            and player.PlayerGui.ScreenGui.Alchemy:FindFirstChild("WaitFrame")
+            and player.PlayerGui.ScreenGui.Alchemy.WaitFrame:FindFirstChild("Time")
+        if not lbl then return 0 end
+        return tonumber(string.match(lbl.Text or "", "%-?[%d%.]+")) or 0
     end)
     if ok and result and result > 0 then return result end
     return 0
