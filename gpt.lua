@@ -1,7 +1,7 @@
 -- LOAD RAYFIELD
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 local Window = Rayfield:CreateWindow({
-    Name = "Test Pew Pew",
+    Name = "GPT",
     LoadingTitle = "Loading...",
     LoadingSubtitle = "Ordered Craft System",
     ConfigurationSaving = { Enabled = false }
@@ -18,20 +18,9 @@ local character         = player.Character or player.CharacterAdded:Wait()
 local root              = character:WaitForChild("HumanoidRootPart")
 
 -- STATE FLAGS
-local AUTO_FORAGE = false
-local AUTO_HAND   = false
-local AUTO_NPC    = false
-
---[[
-  FORAGE_LOCKED:
-    true  → forage tidak akan Create forest (singkat, hanya saat craft+mixing dikirim
-            dan saat finishPill)
-    false → forage bebas berjalan
-
-  HAND_BUSY:
-    true  → pill sedang dalam proses (700s), doHandCraft tidak akan memulai craft baru
-    false → siap craft pill berikutnya
-]]
+local AUTO_FORAGE   = false
+local AUTO_HAND     = false
+local AUTO_NPC      = false
 local FORAGE_LOCKED = false
 local HAND_BUSY     = false
 
@@ -109,13 +98,11 @@ local function waitForResult(textBefore, timeoutSec)
             end
         end
     end
-    -- Timeout dianggap sukses (label mungkin tidak berubah karena pill sama)
     return "TIMEOUT"
 end
 
 -- ════════════════════════════════════════════════════════════
--- TIMER DETECTOR (Hand mixing ~20s) — lazy getter
--- Mencegah error AlchemyPart2 saat UI belum terbuka
+-- TIMER DETECTOR (Hand) — lazy getter
 -- ════════════════════════════════════════════════════════════
 local function getTimerValue()
     local ok, result = pcall(function()
@@ -134,12 +121,25 @@ local function isTimerRunning() return getTimerValue() > 0 end
 
 -- ════════════════════════════════════════════════════════════
 -- FOREST NAVIGATION
--- Anchor sebelum Destroy → tidak jatuh → unanchor setelah unload
+-- Gunakan getconnections pada button Leave UI
+-- Path: PlayerGui.ScreenGui.Forest.LeaveFrame.Leave
 -- ════════════════════════════════════════════════════════════
 local function leaveForest()
     if root and root.Parent then root.Anchored = true end
     task.wait(0.2)
-    remote:FireServer("Forest", false, "Destroy")
+
+    local ok = pcall(function()
+        local btn = player.PlayerGui.ScreenGui.Forest.LeaveFrame.Leave
+        for _, conn in pairs(getconnections(btn.MouseButton1Click)) do
+            conn:Fire()
+        end
+    end)
+
+    if not ok then
+        print("⚠ Leave button not found, fallback to Destroy")
+        remote:FireServer("Forest", false, "Destroy")
+    end
+
     task.wait(3)
     if root and root.Parent then root.Anchored = false end
     task.wait(0.5)
@@ -337,29 +337,21 @@ local NPC_DONE    = 0
 local NPC_TARGET  = 0
 
 -- ════════════════════════════════════════════════════════════
--- HAND CRAFT — dipanggil dari forage loop setelah collect
---
--- Flow:
---   Jika HAND_BUSY (pill sedang masak) → return, forage lanjut normal
---   Jika stok tidak cukup → skip recipe ini, forage lanjut
---   Kirim craft + mixing → FORAGE_LOCKED = false (forage langsung bebas)
---   [async] tunggu timer muncul → tunggu timer habis + 5s
---         → LOCK sebentar → finishPill → UNLOCK → advance index
+-- HAND CRAFT
+-- Flow: collect selesai → leaveForest → doHandCraft
+-- FORAGE_LOCKED = true saat craft+mixing dikirim (singkat)
+-- FORAGE_LOCKED = false setelah mixing → forage bebas jalan
+-- HAND_BUSY = true selama pill masak (700s)
+-- HAND_BUSY = false setelah finishPill
 -- ════════════════════════════════════════════════════════════
 local function doHandCraft()
     if not AUTO_HAND then return end
     if HAND_DONE >= HAND_TARGET then return end
-
-    -- Pill sebelumnya masih masak → jangan mulai baru
-    if HAND_BUSY then
-        print("⏳ Hand busy, pill still cooking")
-        return
-    end
+    if HAND_BUSY then return end
 
     local recipeName      = recipes[HAND_INDEX][1]
     local ingredientTable = recipes[HAND_INDEX][2]
 
-    -- Stok tidak cukup → skip recipe ini, coba di forage cycle berikutnya
     if not canCraft(ingredientTable) then
         missingLog(recipeName, ingredientTable)
         HAND_INDEX += 1
@@ -367,7 +359,6 @@ local function doHandCraft()
         return
     end
 
-    -- Tandai pill sedang diproses
     HAND_BUSY     = true
     FORAGE_LOCKED = true
 
@@ -378,31 +369,23 @@ local function doHandCraft()
 
     -- Unlock forage segera setelah mixing dikirim
     FORAGE_LOCKED = false
-    print("🌿 Forage unlocked — pill cooking")
 
-    -- Async: tunggu timer selesai → finishPill
     task.spawn(function()
-        -- Tunggu timer muncul (max 5s)
         local waitAppear = tick() + 5
         repeat task.wait(0.5) until isTimerRunning() or tick() > waitAppear
 
         if isTimerRunning() then
-            print("⏱ Pill timer started:", getTimerValue(), "s")
+            print("⏱ Pill timer:", getTimerValue(), "s")
         end
 
-        -- Tunggu timer habis
         repeat task.wait(2) until not isTimerRunning() or not AUTO_HAND
 
         if not AUTO_HAND then
-            HAND_BUSY     = false
-            FORAGE_LOCKED = false
-            return
+            HAND_BUSY = false; FORAGE_LOCKED = false; return
         end
 
-        -- Tambahan 5s buffer setelah timer habis
         task.wait(5)
 
-        -- Lock forage sebentar saat finishPill
         FORAGE_LOCKED = true
         remote:FireServer("AlchemyController", false, "finishPill")
         task.wait(1)
@@ -412,37 +395,31 @@ local function doHandCraft()
         HAND_BUSY  = false
         print("📊 Hand:", HAND_DONE, "/", HAND_TARGET)
 
-        -- Advance ke recipe berikutnya
         HAND_INDEX += 1
         if HAND_INDEX > RECIPE_COUNT then HAND_INDEX = 1 end
 
-        -- Cek target tercapai
         if HAND_DONE >= HAND_TARGET then
             AUTO_HAND = false
             Rayfield:Notify({
-                Title    = "✅ Handcraft Done",
-                Content  = HAND_DONE .. " / " .. HAND_TARGET .. " pills",
+                Title   = "✅ Handcraft Done",
+                Content = HAND_DONE.." / "..HAND_TARGET.." pills",
                 Duration = 8
             })
-            print("🛠 Hand DONE:", HAND_DONE, "/", HAND_TARGET)
         end
     end)
 end
 
 -- ════════════════════════════════════════════════════════════
--- NPC CRAFT PASS — independen, tidak terpengaruh forage/hand
--- Skip: HANYA jika NO_RECIPE
+-- NPC CRAFT PASS
 -- ════════════════════════════════════════════════════════════
 local function runNPCCraftPass()
     if not AUTO_NPC then return end
-
     local i = 1
     while i <= RECIPE_COUNT do
         if not AUTO_NPC then break end
         local recipeName      = recipes[i][1]
         local ingredientTable = recipes[i][2]
 
-        -- Tunggu stok, log tiap 4 check (~20s)
         local _logN = 0
         while not canCraft(ingredientTable) do
             if not AUTO_NPC then break end
@@ -456,26 +433,20 @@ local function runNPCCraftPass()
         remote:FireServer("AlchemyController", false, "alchemist", ingredientTable)
         task.wait(1.5)
         local result = waitForResult(textBefore, 20)
-
         if not AUTO_NPC then break end
 
         if result == "SUCCESS" or result == "TIMEOUT" then
             NPC_DONE += 1
             print("✅ NPC:", recipeName, "| Total:", NPC_DONE, "/", NPC_TARGET)
             i += 1
-
         elseif result == "NO_RECIPE" then
             print("⏭ NO_RECIPE:", recipeName)
             i += 1
-
         elseif result == "NO_STONE" then
             task.wait(10)
-            -- i tidak increment → retry
-
         elseif result == "CANCELLED" then
             break
         end
-
         task.wait(2)
     end
     print("🧪 NPC pass done:", NPC_DONE)
@@ -483,25 +454,19 @@ end
 
 -- ════════════════════════════════════════════════════════════
 -- LOOP FORAGE
--- Tidak masuk forest jika FORAGE_LOCKED
--- Setelah collect → panggil doHandCraft (non-blocking, async internnya)
 -- ════════════════════════════════════════════════════════════
 task.spawn(function()
     while true do
         task.wait(0.5)
         if not AUTO_FORAGE then task.wait(1); continue end
-
-        -- Tunggu jika forage sedang di-lock oleh hand
         if FORAGE_LOCKED then task.wait(1); continue end
 
-        -- Pastikan root valid
         if not player.Character
         or not player.Character:FindFirstChild("HumanoidRootPart") then
             refreshCharacter(); task.wait(2); continue
         end
         root = player.Character.HumanoidRootPart
 
-        -- Coba masuk forest
         remote:FireServer("Forest", false, "Create")
         task.wait(3)
 
@@ -509,7 +474,6 @@ task.spawn(function()
         repeat task.wait(1) until forestHasItems() or tick() > waitItems
 
         if forestHasItems() then
-            -- Collect semua item
             while forestHasItems() and AUTO_FORAGE do
                 local items = getItems()
                 if #items == 0 then break end
@@ -522,12 +486,13 @@ task.spawn(function()
             end
             print("✅ Forest collected")
 
-            -- Trigger Hand setelah collect (async, tidak block forage)
+            -- Leave dulu, BARU hand craft (fix AlchemyPart2)
+            leaveForest()
+
             if AUTO_HAND then
                 doHandCraft()
             end
 
-            leaveForest()
             task.wait(5)
         else
             task.wait(5)
@@ -536,7 +501,7 @@ task.spawn(function()
 end)
 
 -- ════════════════════════════════════════════════════════════
--- LOOP NPC — independen
+-- LOOP NPC
 -- ════════════════════════════════════════════════════════════
 local NPC_RUNNING = false
 task.spawn(function()
@@ -557,8 +522,8 @@ task.spawn(function()
         AUTO_NPC    = false
         NPC_RUNNING = false
         Rayfield:Notify({
-            Title    = "✅ Alchemist Done",
-            Content  = NPC_DONE .. " / " .. NPC_TARGET .. " pills",
+            Title   = "✅ Alchemist Done",
+            Content = NPC_DONE.." / "..NPC_TARGET.." pills",
             Duration = 8
         })
         print("🧪 NPC DONE:", NPC_DONE)
