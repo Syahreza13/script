@@ -1,7 +1,7 @@
 -- LOAD RAYFIELD
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 local Window = Rayfield:CreateWindow({
-    Name = "SR13 FINAL STABLE",
+    Name = "Test Pew Pew",
     LoadingTitle = "Loading...",
     LoadingSubtitle = "Ordered Craft System",
     ConfigurationSaving = { Enabled = false }
@@ -22,9 +22,18 @@ local AUTO_FORAGE = false
 local AUTO_HAND   = false
 local AUTO_NPC    = false
 
--- FORAGE_LOCKED: true saat Hand sedang dalam fase craft→mixing (sebelum timer muncul)
--- Forage tidak akan Create forest selama locked
+--[[
+  FORAGE_LOCKED:
+    true  → forage tidak akan Create forest (singkat, hanya saat craft+mixing dikirim
+            dan saat finishPill)
+    false → forage bebas berjalan
+
+  HAND_BUSY:
+    true  → pill sedang dalam proses (700s), doHandCraft tidak akan memulai craft baru
+    false → siap craft pill berikutnya
+]]
 local FORAGE_LOCKED = false
+local HAND_BUSY     = false
 
 -- CHARACTER REFRESH
 local function refreshCharacter()
@@ -100,12 +109,12 @@ local function waitForResult(textBefore, timeoutSec)
             end
         end
     end
-    print("⚠ TIMEOUT → fallback SUCCESS")
-    return "SUCCESS"
+    -- Timeout dianggap sukses (label mungkin tidak berubah karena pill sama)
+    return "TIMEOUT"
 end
 
 -- ════════════════════════════════════════════════════════════
--- TIMER DETECTOR (Hand) — lazy getter
+-- TIMER DETECTOR (Hand mixing ~20s) — lazy getter
 -- Mencegah error AlchemyPart2 saat UI belum terbuka
 -- ════════════════════════════════════════════════════════════
 local function getTimerValue()
@@ -224,7 +233,6 @@ local function getItems()
     return items
 end
 
--- collectItem dari versi stabil (InputHoldBegin)
 local function collectItem(item)
     local targetPart = getTargetPart(item)
     local prompt     = item:FindFirstChildWhichIsA("ProximityPrompt", true)
@@ -250,7 +258,6 @@ end
 -- RECIPES
 -- ════════════════════════════════════════════════════════════
 local recipes = {
-    -- Mistveil Focus Pill
     {"Mistveil Focus Pill A", {["Spirit Spring Herb"]=2,["Azure Serpent Grass"]=1,["Silverleaf Herb"]=2,["Thousand Year Lotus"]=1}},
     {"Mistveil Focus Pill B", {["Spirit Spring Herb"]=1,["Blue Wave Coral Herb"]=1,["Cloud Mist Herb"]=3,["Thousand Year Lotus"]=1}},
     {"Mistveil Focus Pill C", {["Spirit Spring Herb"]=2,["Silverleaf Herb"]=3,["Starlight Dew Herb"]=1}},
@@ -276,7 +283,6 @@ local recipes = {
     {"Mistveil Focus Pill W", {["Spirit Spring Herb"]=1,["Silverleaf Herb"]=1,["Dandelion of Qi"]=1,["Purple Lightning Orchid"]=1,["Cloud Mist Herb"]=1,["Seven Star Flower"]=1}},
     {"Mistveil Focus Pill X", {["Spirit Spring Herb"]=1,["Cloud Mist Herb"]=1,["Silverleaf Herb"]=2,["Dandelion of Qi"]=1,["Seven Star Flower"]=1}},
     {"Mistveil Focus Pill Y", {["Dandelion of Qi"]=2,["Purple Lightning Orchid"]=1,["Cloud Mist Herb"]=2,["Spirit Spring Herb"]=1}},
-    -- Jade Tide Pill
     {"Jade Tide Pill A", {["Moonlight Jade Leaf"]=2,["Blue Wave Coral Herb"]=2,["Bitter Jade Grass"]=2}},
     {"Jade Tide Pill B", {["Black Iron Root"]=1,["Moonlight Jade Leaf"]=2,["Blue Wave Coral Herb"]=2,["Bitter Jade Grass"]=2}},
     {"Jade Tide Pill C", {["Black Iron Root"]=2,["Blue Wave Coral Herb"]=2,["Bitter Jade Grass"]=2}},
@@ -284,7 +290,6 @@ local recipes = {
     {"Jade Tide Pill E", {["Ironbone Grass"]=2,["Blue Wave Coral Herb"]=2,["Bitter Jade Grass"]=2}},
     {"Jade Tide Pill F", {["Crimson Flame Mushroom"]=2,["Blue Wave Coral Herb"]=2,["Red Ginseng"]=2}},
     {"Jade Tide Pill G", {["Blue Wave Coral Herb"]=2,["Black Iron Root"]=1,["Crimson Flame Mushroom"]=1,["Bitter Jade Grass"]=2}},
-    -- Celestial Harmony Pill
     {"Celestial Harmony Pill A", {["Thousand Year Lotus"]=1,["Seven Star Flower"]=2,["Moonlight Jade Leaf"]=1,["Silverleaf Herb"]=1,["Starlight Dew Herb"]=1}},
     {"Celestial Harmony Pill B", {["Seven Star Flower"]=2,["Moonlight Jade Leaf"]=1,["Silverleaf Herb"]=1,["Starlight Dew Herb"]=2}},
     {"Celestial Harmony Pill C", {["Seven Star Flower"]=2,["Black Iron Root"]=1,["Silverleaf Herb"]=1,["Starlight Dew Herb"]=2}},
@@ -293,7 +298,6 @@ local recipes = {
     {"Celestial Harmony Pill F", {["Cloud Mist Herb"]=1,["Seven Star Flower"]=3,["Moonlight Jade Leaf"]=1,["Starlight Dew Herb"]=1}},
     {"Celestial Harmony Pill G", {["Silverleaf Herb"]=1,["Seven Star Flower"]=1,["Mountain Green Herb"]=1,["Dandelion of Qi"]=1,["Wild Spirit Grass"]=2}},
     {"Celestial Harmony Pill H", {["Thousand Year Lotus"]=1,["Silverleaf Herb"]=1,["Seven Star Flower"]=3,["Moonlight Jade Leaf"]=1}},
-    -- Concentration Pill
     {"Concentration Pill A", {["Azure Serpent Grass"]=2,["Starlight Dew Herb"]=2,["Heavenly Spirit Vine"]=1,["Thousand Year Lotus"]=1}},
     {"Concentration Pill B", {["Azure Serpent Grass"]=3,["Thousand Year Lotus"]=3}},
     {"Concentration Pill C", {["Azure Serpent Grass"]=3,["Starlight Dew Herb"]=3}},
@@ -303,29 +307,23 @@ local recipes = {
     {"Concentration Pill G", {["Azure Serpent Grass"]=3,["Starlight Dew Herb"]=1,["Seven Star Flower"]=2}},
     {"Concentration Pill H", {["Seven Star Flower"]=3,["Azure Serpent Grass"]=3}},
     {"Concentration Pill I", {["Azure Serpent Grass"]=3,["Seven Star Flower"]=1,["Dandelion of Qi"]=2}},
-    -- Stormheart Pill
     {"Stormheart Pill A", {["Azure Serpent Grass"]=2,["Cloud Mist Herb"]=2,["Spirit Spring Herb"]=2}},
     {"Stormheart Pill B", {["Heavenly Spirit Vine"]=2,["Spirit Spring Herb"]=2,["Cloud Mist Herb"]=2}},
     {"Stormheart Pill C", {["Cloud Mist Herb"]=4,["Spirit Spring Herb"]=2}},
     {"Stormheart Pill D", {["Cloud Mist Herb"]=4,["Spirit Spring Herb"]=1,["Dandelion of Qi"]=1}},
     {"Stormheart Pill E", {["Dandelion of Qi"]=1,["Seven Star Flower"]=1,["Purple Lightning Orchid"]=1,["Cloud Mist Herb"]=3}},
-    -- Starborn Agility Pill
     {"Starborn Agility Pill A", {["Seven Star Flower"]=1,["Starlight Dew Herb"]=4,["Heavenly Spirit Vine"]=1}},
     {"Starborn Agility Pill B", {["Seven Star Flower"]=3,["Cloud Mist Herb"]=1,["Spirit Spring Herb"]=2}},
     {"Starborn Agility Pill C", {["Seven Star Flower"]=2,["Azure Serpent Grass"]=1,["Dandelion of Qi"]=3}},
-    -- Seven Star Enlightenment Pill
     {"Seven Star Enlightenment Pill A", {["Thousand Year Lotus"]=1,["Blue Wave Coral Herb"]=2,["Starlight Dew Herb"]=2,["Heavenly Spirit Vine"]=1}},
-    -- Void Clarity Pill
     {"Void Clarity Pill A", {["Starlight Dew Herb"]=2,["Cloud Mist Herb"]=2,["Heavenly Spirit Vine"]=1,["Bitter Jade Grass"]=1}},
     {"Void Clarity Pill B", {["Blue Wave Coral Herb"]=2,["Cloud Mist Herb"]=2,["Heavenly Spirit Vine"]=1,["Bitter Jade Grass"]=1}},
     {"Void Clarity Pill C", {["Blue Wave Coral Herb"]=2,["Cloud Mist Herb"]=2,["Azure Serpent Grass"]=1,["Bitter Jade Grass"]=1}},
     {"Void Clarity Pill D", {["Blue Wave Coral Herb"]=2,["Cloud Mist Herb"]=3,["Bitter Jade Grass"]=1}},
     {"Void Clarity Pill E", {["Silverleaf Herb"]=1,["Cloud Mist Herb"]=2,["Seven Star Flower"]=2,["Bitter Jade Grass"]=1}},
     {"Void Clarity Pill F", {["Basic Herb"]=1,["Cloud Mist Herb"]=2,["Thousand Year Lotus"]=2,["Heavenly Spirit Vine"]=1}},
-    -- Dragon Pulse Pill
     {"Dragon Pulse Pill A", {["Blue Wave Coral Herb"]=2,["Azure Serpent Grass"]=1,["Spirit Spring Herb"]=1,["Moonlight Jade Leaf"]=2}},
     {"Dragon Pulse Pill B", {["Blue Wave Coral Herb"]=2,["Cloud Mist Herb"]=1,["Spirit Spring Herb"]=1,["Ironbone Grass"]=2}},
-    -- Special
     {"Lotus Nirvana Pill",   {["Thousand Year Lotus"]=6}},
     {"Heavenly Spirit Pill", {["Heavenly Spirit Vine"]=2,["Starlight Dew Herb"]=3,["Moonlight Jade Leaf"]=1}},
 }
@@ -334,30 +332,34 @@ local RECIPE_COUNT = #recipes
 -- COUNTERS & INDEX
 local HAND_DONE   = 0
 local HAND_TARGET = 0
-local HAND_INDEX  = 1  -- recipe mana yang akan dicraft berikutnya
+local HAND_INDEX  = 1
 local NPC_DONE    = 0
 local NPC_TARGET  = 0
 
 -- ════════════════════════════════════════════════════════════
--- HAND CRAFT — dipanggil dari forage loop setelah collect selesai
+-- HAND CRAFT — dipanggil dari forage loop setelah collect
 --
 -- Flow:
---   1. Cek stok recipe di HAND_INDEX
---   2. LOCK forage → fire craft + mixing
---   3. Tunggu timer muncul (server mulai proses)
---   4. UNLOCK forage → forage & NPC bisa jalan selama timer berjalan
---   5. Tunggu timer habis → finishPill
---   6. Advance HAND_INDEX
+--   Jika HAND_BUSY (pill sedang masak) → return, forage lanjut normal
+--   Jika stok tidak cukup → skip recipe ini, forage lanjut
+--   Kirim craft + mixing → FORAGE_LOCKED = false (forage langsung bebas)
+--   [async] tunggu timer muncul → tunggu timer habis + 5s
+--         → LOCK sebentar → finishPill → UNLOCK → advance index
 -- ════════════════════════════════════════════════════════════
 local function doHandCraft()
     if not AUTO_HAND then return end
     if HAND_DONE >= HAND_TARGET then return end
 
+    -- Pill sebelumnya masih masak → jangan mulai baru
+    if HAND_BUSY then
+        print("⏳ Hand busy, pill still cooking")
+        return
+    end
+
     local recipeName      = recipes[HAND_INDEX][1]
     local ingredientTable = recipes[HAND_INDEX][2]
 
-    -- Jika stok tidak cukup, skip recipe ini (lanjut ke berikutnya)
-    -- Stok akan tersedia di forage cycle berikutnya
+    -- Stok tidak cukup → skip recipe ini, coba di forage cycle berikutnya
     if not canCraft(ingredientTable) then
         missingLog(recipeName, ingredientTable)
         HAND_INDEX += 1
@@ -365,52 +367,71 @@ local function doHandCraft()
         return
     end
 
-    -- LOCK forage sebelum fire craft
+    -- Tandai pill sedang diproses
+    HAND_BUSY     = true
     FORAGE_LOCKED = true
-    print("🛠 Hand craft:", recipeName, "["..HAND_INDEX.."/"..RECIPE_COUNT.."]")
 
+    print("🛠 Hand craft:", recipeName, "["..HAND_INDEX.."/"..RECIPE_COUNT.."]")
     remote:FireServer("AlchemyController", false, "craft", ingredientTable)
     task.wait(0.3)
     remote:FireServer("AlchemyController", false, "mixing", 1)
 
-    -- Tunggu timer muncul (max 5s) → server sudah mulai proses
-    local waitTimer = tick() + 5
-    repeat task.wait(0.2) until isTimerRunning() or tick() > waitTimer
-
-    -- Timer sudah jalan → UNLOCK forage, biarkan forage & NPC berjalan
+    -- Unlock forage segera setelah mixing dikirim
     FORAGE_LOCKED = false
-    print("⏱ Timer running — forage & NPC unlocked. Timer:", getTimerValue(), "s")
+    print("🌿 Forage unlocked — pill cooking")
 
-    -- Tunggu timer habis
-    repeat task.wait(1) until not isTimerRunning() or not AUTO_HAND
+    -- Async: tunggu timer selesai → finishPill
+    task.spawn(function()
+        -- Tunggu timer muncul (max 5s)
+        local waitAppear = tick() + 5
+        repeat task.wait(0.5) until isTimerRunning() or tick() > waitAppear
 
-    if not AUTO_HAND then return end
+        if isTimerRunning() then
+            print("⏱ Pill timer started:", getTimerValue(), "s")
+        end
 
-    -- Finish pill
-    remote:FireServer("AlchemyController", false, "finishPill")
-    HAND_DONE += 1
-    print("📊 Hand:", HAND_DONE, "/", HAND_TARGET)
+        -- Tunggu timer habis
+        repeat task.wait(2) until not isTimerRunning() or not AUTO_HAND
 
-    -- Advance ke recipe berikutnya
-    HAND_INDEX += 1
-    if HAND_INDEX > RECIPE_COUNT then HAND_INDEX = 1 end
+        if not AUTO_HAND then
+            HAND_BUSY     = false
+            FORAGE_LOCKED = false
+            return
+        end
 
-    -- Cek apakah target tercapai
-    if HAND_DONE >= HAND_TARGET then
-        AUTO_HAND = false
+        -- Tambahan 5s buffer setelah timer habis
+        task.wait(5)
+
+        -- Lock forage sebentar saat finishPill
+        FORAGE_LOCKED = true
+        remote:FireServer("AlchemyController", false, "finishPill")
+        task.wait(1)
         FORAGE_LOCKED = false
-        Rayfield:Notify({
-            Title    = "✅ Handcraft Done",
-            Content  = HAND_DONE .. " / " .. HAND_TARGET .. " pills",
-            Duration = 8
-        })
-        print("🛠 Hand DONE:", HAND_DONE, "/", HAND_TARGET)
-    end
+
+        HAND_DONE += 1
+        HAND_BUSY  = false
+        print("📊 Hand:", HAND_DONE, "/", HAND_TARGET)
+
+        -- Advance ke recipe berikutnya
+        HAND_INDEX += 1
+        if HAND_INDEX > RECIPE_COUNT then HAND_INDEX = 1 end
+
+        -- Cek target tercapai
+        if HAND_DONE >= HAND_TARGET then
+            AUTO_HAND = false
+            Rayfield:Notify({
+                Title    = "✅ Handcraft Done",
+                Content  = HAND_DONE .. " / " .. HAND_TARGET .. " pills",
+                Duration = 8
+            })
+            print("🛠 Hand DONE:", HAND_DONE, "/", HAND_TARGET)
+        end
+    end)
 end
 
 -- ════════════════════════════════════════════════════════════
 -- NPC CRAFT PASS — independen, tidak terpengaruh forage/hand
--- Skip: HANYA jika NO_RECIPE. Semua kondisi lain tunggu/retry.
+-- Skip: HANYA jika NO_RECIPE
 -- ════════════════════════════════════════════════════════════
 local function runNPCCraftPass()
     if not AUTO_NPC then return end
@@ -421,7 +442,7 @@ local function runNPCCraftPass()
         local recipeName      = recipes[i][1]
         local ingredientTable = recipes[i][2]
 
-        -- Tunggu stok, log tiap 4 check (20s)
+        -- Tunggu stok, log tiap 4 check (~20s)
         local _logN = 0
         while not canCraft(ingredientTable) do
             if not AUTO_NPC then break end
@@ -434,7 +455,7 @@ local function runNPCCraftPass()
         local textBefore = getResultText()
         remote:FireServer("AlchemyController", false, "alchemist", ingredientTable)
         task.wait(1.5)
-        local result = waitForResult(textBefore, 15)
+        local result = waitForResult(textBefore, 20)
 
         if not AUTO_NPC then break end
 
@@ -448,8 +469,8 @@ local function runNPCCraftPass()
             i += 1
 
         elseif result == "NO_STONE" then
-            -- Retry recipe yang sama
             task.wait(10)
+            -- i tidak increment → retry
 
         elseif result == "CANCELLED" then
             break
@@ -461,18 +482,16 @@ local function runNPCCraftPass()
 end
 
 -- ════════════════════════════════════════════════════════════
--- LOOP FORAGE — mengontrol Hand craft setelah setiap collect
---
--- Flow per cycle:
---   if FORAGE_LOCKED → skip Create, tunggu unlock
---   Create forest → collect → doHandCraft() → leaveForest → wait 5s
+-- LOOP FORAGE
+-- Tidak masuk forest jika FORAGE_LOCKED
+-- Setelah collect → panggil doHandCraft (non-blocking, async internnya)
 -- ════════════════════════════════════════════════════════════
 task.spawn(function()
     while true do
         task.wait(0.5)
         if not AUTO_FORAGE then task.wait(1); continue end
 
-        -- Jika Hand sedang dalam fase craft→mixing, tunggu unlock
+        -- Tunggu jika forage sedang di-lock oleh hand
         if FORAGE_LOCKED then task.wait(1); continue end
 
         -- Pastikan root valid
@@ -503,24 +522,21 @@ task.spawn(function()
             end
             print("✅ Forest collected")
 
-            -- Setelah collect: trigger Hand craft (jika aktif)
-            -- Hand akan LOCK forage selama fase craft→mixing
+            -- Trigger Hand setelah collect (async, tidak block forage)
             if AUTO_HAND then
                 doHandCraft()
             end
 
-            -- Leave forest (setelah Hand unlock forage)
             leaveForest()
             task.wait(5)
         else
-            -- Masih cooldown atau gagal load
             task.wait(5)
         end
     end
 end)
 
 -- ════════════════════════════════════════════════════════════
--- LOOP NPC — independen, tidak terikat forage/hand
+-- LOOP NPC — independen
 -- ════════════════════════════════════════════════════════════
 local NPC_RUNNING = false
 task.spawn(function()
@@ -567,11 +583,12 @@ Tab:CreateToggle({
         if v then
             HAND_DONE   = 0
             HAND_INDEX  = 1
+            HAND_BUSY   = false
             HAND_TARGET = RECIPE_COUNT * LOOP_COUNT
             print("🎯 Hand Target:", HAND_TARGET, "(", LOOP_COUNT, "×", RECIPE_COUNT, ")")
         else
-            -- User matikan manual → pastikan forage tidak tertahan
             FORAGE_LOCKED = false
+            HAND_BUSY     = false
         end
     end
 })
