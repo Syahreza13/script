@@ -21,6 +21,7 @@ local root              = character:WaitForChild("HumanoidRootPart")
 local AUTO_FORAGE = false
 local AUTO_HAND   = false
 local AUTO_NPC    = false
+local AUTO_USE    = false
 
 -- CHARACTER REFRESH
 local function refreshCharacter()
@@ -120,10 +121,6 @@ local function isTimerRunning() return getTimerValue() > 0 end
 
 -- ════════════════════════════════════════════════════════════
 -- FOREST NAVIGATION
--- 1. Anchor player (tidak jatuh saat transisi)
--- 2. Klik button Leave via getconnections (identik dengan manual)
--- 3. Respawn player → reset forest state bersih
---    (mencegah bug "jatuh ke void" pada percobaan berikutnya)
 -- ════════════════════════════════════════════════════════════
 local function leaveForest()
     if root and root.Parent then root.Anchored = true end
@@ -145,7 +142,6 @@ local function leaveForest()
     if root and root.Parent then root.Anchored = false end
     task.wait(0.2)
 
-    -- Respawn untuk reset state forest
     local humanoid = character and character:FindFirstChildWhichIsA("Humanoid")
     if humanoid and humanoid.Health > 0 then
         humanoid.Health = 0
@@ -198,7 +194,6 @@ end
 
 -- ════════════════════════════════════════════════════════════
 -- FOREST ITEM DETECTION & COLLECTION
--- FIX Bug 2: cek ProximityPrompt agar tidak hitung dekorasi
 -- ════════════════════════════════════════════════════════════
 local collectibles = {
     "Azure Serpent Grass","Basic Herb","Bitter Jade Grass","Black Iron Root",
@@ -272,14 +267,89 @@ local function collectItem(item)
         if not item.Parent then break end
         task.wait(0.1)
     end
-    -- TIDAK restore CFrame — player tetap di posisi item terakhir
-    -- ini lebih efisien karena item berikutnya diambil dari posisi sekarang
 end
+
+-- ════════════════════════════════════════════════════════════
+-- AUTO USE PILL
+-- Path inventory : ScreenGui.MainFrame.Inventory.ItemList
+--                  .InsideFrame.MainFrame.[TypeId/Pill.InstanceId]
+-- Path active    : ScreenGui.SecondaryStats.ActivePills
+--                  .ScrollingFrame.[TypeId/Pill.InstanceId]
+-- Remote         : Clicked:FireServer("Inventory",false,"Equip","TypeId/Pill.InstanceId")
+-- ════════════════════════════════════════════════════════════
+
+-- Ambil semua pill yang sudah aktif (key = frame.Name)
+local function getActivePillIds()
+    local active = {}
+    pcall(function()
+        local sf = player.PlayerGui.ScreenGui
+            .SecondaryStats.ActivePills.ScrollingFrame
+        for _, child in ipairs(sf:GetChildren()) do
+            if child.Name:match("%d+/Pill%.%d+") then
+                active[child.Name] = true
+            end
+        end
+    end)
+    return active
+end
+
+-- Ambil semua pill di inventory yang amount > 0
+local function getInventoryPills()
+    local pills = {}
+    pcall(function()
+        local mainFrame = player.PlayerGui.ScreenGui.MainFrame
+            .Inventory.ItemList.InsideFrame.MainFrame
+        for _, frame in ipairs(mainFrame:GetChildren()) do
+            if frame.Name:match("%d+/Pill%.%d+") then
+                local nameLabel   = frame:FindFirstChild("TextLabel", true)
+                local amountLabel = frame:FindFirstChild("TextAmount")
+                -- Robust parse: handle "x5", "5x", "5", dll
+                local amountText  = amountLabel and amountLabel.Text or "0"
+                local amountNum   = tonumber(string.match(amountText, "%d+")) or 0
+                if amountNum > 0 then
+                    table.insert(pills, {
+                        id   = frame.Name,
+                        name = nameLabel and nameLabel.Text or "Unknown",
+                    })
+                end
+            end
+        end
+    end)
+    return pills
+end
+
+-- Equip semua pill di inventory yang belum aktif
+local function doAutoUsePills()
+    local active = getActivePillIds()
+    local pills  = getInventoryPills()
+    local used   = 0
+    for _, pill in ipairs(pills) do
+        if not active[pill.id] then
+            remote:FireServer("Inventory", false, "Equip", pill.id)
+            print("💊 Equip:", pill.name, "(", pill.id, ")")
+            used += 1
+            task.wait(0.5)
+        end
+    end
+    if used > 0 then
+        print("💊 Auto Use: equipped", used, "pills")
+    end
+end
+
+-- Loop Auto Use — cek tiap 10 detik
+task.spawn(function()
+    while true do
+        task.wait(10)
+        if AUTO_USE then
+            doAutoUsePills()
+        end
+    end
+end)
 
 -- ════════════════════════════════════════════════════════════
 -- RECIPES
 -- ════════════════════════════════════════════════════════════
-local recipes =
+local recipes = 
     loadstring(game:HttpGet("https://raw.githubusercontent.com/Syahreza13/script/refs/heads/main/Recipes"))()
 
 local RECIPE_COUNT = #recipes
@@ -291,7 +361,6 @@ local HAND_TARGET, NPC_TARGET = 0, 0
 
 -- ════════════════════════════════════════════════════════════
 -- HAND CRAFT PASS
--- FIX Bug 3: tunggu timer mixing muncul & selesai sebelum finishPill
 -- ════════════════════════════════════════════════════════════
 local function runHandCraftPass()
     if not AUTO_HAND then return end
@@ -301,7 +370,6 @@ local function runHandCraftPass()
         local recipeName      = recipes[i][1]
         local ingredientTable = recipes[i][2]
 
-        -- Tunggu stok tersedia (infinite wait, tidak skip)
         local _logH = 0
         while not canCraft(ingredientTable) do
             if not AUTO_HAND then break end
@@ -311,28 +379,23 @@ local function runHandCraftPass()
         end
         if not AUTO_HAND then break end
 
-        -- Jika timer masih jalan dari craft sebelumnya, tunggu habis
         if isTimerRunning() then
             print("⏱ Waiting previous timer:", getTimerValue(), "s")
             repeat task.wait(1) until not isTimerRunning() or not AUTO_HAND
         end
         if not AUTO_HAND then break end
 
-        -- Fire craft + mixing
         print("🛠", recipeName)
         remote:FireServer("AlchemyController", false, "craft", ingredientTable)
         task.wait(0.3)
         remote:FireServer("AlchemyController", false, "mixing", 1)
 
-        -- Tunggu timer MUNCUL (mixing mulai, max 5s)
         local waitStart = tick() + 5
         repeat task.wait(0.3) until isTimerRunning() or tick() > waitStart
 
-        -- Tunggu timer HABIS (mixing selesai)
         repeat task.wait(1) until not isTimerRunning() or not AUTO_HAND
         if not AUTO_HAND then break end
 
-        -- Sekarang aman finishPill
         remote:FireServer("AlchemyController", false, "finishPill")
         HAND_DONE += 1
         print("📊 Hand:", HAND_DONE, "/", HAND_TARGET)
@@ -343,7 +406,6 @@ end
 
 -- ════════════════════════════════════════════════════════════
 -- NPC CRAFT PASS
--- Skip: HANYA jika NO_RECIPE
 -- ════════════════════════════════════════════════════════════
 local function runNPCCraftPass()
     if not AUTO_NPC then return end
@@ -387,45 +449,38 @@ local function runNPCCraftPass()
 end
 
 -- ════════════════════════════════════════════════════════════
--- LOOP FORAGE — independen, tidak ada LOCK
--- FIX Bug 1: respawn setelah leave untuk reset forest state
--- FIX Bug 2: hanya print "Collected" jika ada item yang tercollect
+-- LOOP FORAGE
 -- ════════════════════════════════════════════════════════════
 task.spawn(function()
     while true do
         task.wait(0.5)
         if not AUTO_FORAGE then task.wait(1); continue end
 
-        -- Pastikan karakter valid
         if not player.Character
         or not player.Character:FindFirstChild("HumanoidRootPart") then
             task.wait(2); continue
         end
         root = player.Character.HumanoidRootPart
 
-        -- Coba masuk forest
         remote:FireServer("Forest", false, "Create")
         task.wait(3)
 
-        -- Tunggu item muncul max 8s
         local waitItems = tick() + 8
         repeat task.wait(1) until forestHasItems() or tick() > waitItems
 
         if forestHasItems() then
-            local collected  = 0
-            local emptyStreak = 0  -- berapa kali berturut2 getItems() return 0
+            local collected   = 0
+            local emptyStreak = 0
 
             while AUTO_FORAGE do
                 local items = getItems()
 
                 if #items == 0 then
                     emptyStreak += 1
-                    -- Keluar hanya setelah 3x kosong berturut2
-                    -- (memberi waktu item yang belum ready untuk spawn)
                     if emptyStreak >= 3 then break end
                     task.wait(1)
                 else
-                    emptyStreak = 0  -- reset streak karena ada item
+                    emptyStreak = 0
                     for _, item in ipairs(items) do
                         if not AUTO_FORAGE then break end
                         local hadParent = item.Parent ~= nil
@@ -452,7 +507,7 @@ task.spawn(function()
 end)
 
 -- ════════════════════════════════════════════════════════════
--- LOOP HAND CRAFT — independen dari forage
+-- LOOP HAND CRAFT
 -- ════════════════════════════════════════════════════════════
 task.spawn(function()
     while true do
@@ -478,7 +533,7 @@ task.spawn(function()
 end)
 
 -- ════════════════════════════════════════════════════════════
--- LOOP NPC CRAFT — independen dari forage
+-- LOOP NPC CRAFT
 -- ════════════════════════════════════════════════════════════
 task.spawn(function()
     while true do
@@ -499,82 +554,6 @@ task.spawn(function()
                 Content = "Total: "..NPC_DONE.." pills",
                 Duration = 8
             })
-        end
-    end
-end)
-
-
--- ════════════════════════════════════════════════════════════
--- AUTO USE PILL
--- Scan inventory → equip pill yang belum aktif
--- ════════════════════════════════════════════════════════════
-local AUTO_USE = false
-
--- Ambil semua pill yang sedang aktif (sudah diequip)
-local function getActivePillIds()
-    local active = {}
-    pcall(function()
-        local frame = player.PlayerGui.ScreenGui
-            .SecondaryStats.ActivePills.ScrollingFrame
-        for _, child in ipairs(frame:GetChildren()) do
-            if child.Name:match("%d+/Pill%.%d+") then
-                active[child.Name] = true
-            end
-        end
-    end)
-    return active
-end
-
--- Ambil semua pill di inventory beserta ID dan namanya
-local function getInventoryPills()
-    local pills = {}
-    pcall(function()
-        local mainFrame = player.PlayerGui.ScreenGui.MainFrame
-            .Inventory.ItemList.InsideFrame.MainFrame
-        for _, frame in ipairs(mainFrame:GetChildren()) do
-            if frame.Name:match("%d+/Pill%.%d+") then
-                local nameLabel   = frame:FindFirstChild("TextLabel", true)
-                local amountLabel = frame:FindFirstChild("TextAmount")
-                local amount = tonumber(amountLabel and amountLabel.Text or "0") or 0
-                if amount > 0 then
-                    table.insert(pills, {
-                        id     = frame.Name,
-                        name   = nameLabel and nameLabel.Text or "Unknown",
-                        amount = amount,
-                    })
-                end
-            end
-        end
-    end)
-    return pills
-end
-
--- Equip semua pill di inventory yang belum aktif
-local function doAutoUsePills()
-    local active = getActivePillIds()
-    local pills  = getInventoryPills()
-    local used   = 0
-
-    for _, pill in ipairs(pills) do
-        if not active[pill.id] then
-            remote:FireServer("Inventory", false, "Equip", pill.id)
-            print("💊 Equip:", pill.name, "(", pill.id, ")")
-            used += 1
-            task.wait(0.5)
-        end
-    end
-
-    if used > 0 then
-        print("💊 Auto Use: equipped", used, "pills")
-    end
-end
-
--- Loop Auto Use — cek tiap 10 detik
-task.spawn(function()
-    while true do
-        task.wait(10)
-        if AUTO_USE then
-            doAutoUsePills()
         end
     end
 end)
