@@ -1,7 +1,7 @@
 -- LOAD RAYFIELD
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 local Window = Rayfield:CreateWindow({
-    Name = "AAAAAAA",
+    Name = "PLEASEEEEE",
     LoadingTitle = "Loading...",
     LoadingSubtitle = "Ordered Craft System",
     ConfigurationSaving = { Enabled = false }
@@ -27,12 +27,12 @@ local AUTO_USE    = false
 local function refreshCharacter()
     character = player.Character or player.CharacterAdded:Wait()
     root = character:WaitForChild("HumanoidRootPart")
+    print("✅ Character Refreshed")
 end
-
 player.CharacterAdded:Connect(function()
     task.wait(1)
     refreshCharacter()
-    print("💀 Respawn — character refreshed")
+    print("💀 Respawn detected")
 end)
 
 -- REMOTES
@@ -57,11 +57,12 @@ Tab:CreateInput({
 })
 
 -- ════════════════════════════════════════════════════════════
--- RESULT DETECTOR (NPC) — lazy getter
+-- RESULT DETECTOR (NPC)
 -- ════════════════════════════════════════════════════════════
 local function getResultLabel()
     local ok, lbl = pcall(function()
-        return player.PlayerGui.ScreenGui.Alchemy.SelectionFrame.Success
+        return player.PlayerGui.ScreenGui
+            .Alchemy.SelectionFrame.Success
     end)
     return ok and lbl or nil
 end
@@ -92,24 +93,26 @@ local function waitForResult(textBefore, timeoutSec)
             end
             if stableCount >= 2 and current ~= textBefore then
                 local lower = string.lower(current)
-                if string.find(lower, "recipe")  then return "NO_RECIPE"
+                if string.find(lower, "recipe") then return "NO_RECIPE"
                 elseif string.find(lower, "spirit") then return "NO_STONE"
                 else return "SUCCESS" end
             end
         end
     end
+    print("⚠ TIMEOUT → fallback SUCCESS")
     return "SUCCESS"
 end
 
 -- ════════════════════════════════════════════════════════════
--- TIMER DETECTOR (Hand mixing) — lazy getter
+-- TIMER DETECTOR (Hand)
 -- ════════════════════════════════════════════════════════════
 local function getTimerValue()
     local ok, result = pcall(function()
-        local sg  = player.PlayerGui:FindFirstChild("ScreenGui")
-        local alc = sg  and sg:FindFirstChild("Alchemy")
-        local wf  = alc and alc:FindFirstChild("WaitFrame")
-        local lbl = wf  and wf:FindFirstChild("Time")
+        local lbl = player.PlayerGui
+            :FindFirstChild("ScreenGui")
+            and player.PlayerGui.ScreenGui:FindFirstChild("Alchemy")
+            and player.PlayerGui.ScreenGui.Alchemy:FindFirstChild("WaitFrame")
+            and player.PlayerGui.ScreenGui.Alchemy.WaitFrame:FindFirstChild("Time")
         if not lbl then return 0 end
         return tonumber(string.match(lbl.Text or "", "%-?[%d%.]+")) or 0
     end)
@@ -117,38 +120,27 @@ local function getTimerValue()
     return 0
 end
 
-local function isTimerRunning() return getTimerValue() > 0 end
+local function isTimerRunning()
+    return getTimerValue() > 0
+end
 
 -- ════════════════════════════════════════════════════════════
 -- FOREST NAVIGATION
 -- ════════════════════════════════════════════════════════════
 local function leaveForest()
-    if root and root.Parent then root.Anchored = true end
-    task.wait(0.2)
-
-    local ok = pcall(function()
-        local btn = player.PlayerGui.ScreenGui.Forest.LeaveFrame.Leave
-        for _, conn in pairs(getconnections(btn.MouseButton1Click)) do
-            conn:Fire()
-        end
-    end)
-
-    if not ok then
-        remote:FireServer("Forest", false, "Destroy")
+    print("🚪 Anchoring player before Destroy...")
+    if root and root.Parent then
+        root.Anchored = true
     end
-
-    task.wait(2)
-
-    if root and root.Parent then root.Anchored = false end
     task.wait(0.2)
-
-    local humanoid = character and character:FindFirstChildWhichIsA("Humanoid")
-    if humanoid and humanoid.Health > 0 then
-        humanoid.Health = 0
-    end
-
+    print("🌲 Destroying Forest...")
+    remote:FireServer("Forest", false, "Destroy")
     task.wait(3)
-    refreshCharacter()
+    if root and root.Parent then
+        root.Anchored = false
+    end
+    print("✅ Forest destroyed, player released")
+    task.wait(0.5)
 end
 
 -- ════════════════════════════════════════════════════════════
@@ -184,11 +176,11 @@ local function missingLog(recipeName, ingredients)
     for herb, qty in pairs(ingredients) do
         local have = getHerbCount(herb)
         if have < qty then
-            table.insert(missing, herb.." ("..have.."/"..qty..")")
+            table.insert(missing, herb .. " (" .. have .. "/" .. qty .. ")")
         end
     end
     if #missing > 0 then
-        print("⏳", recipeName, "→", table.concat(missing, ", "))
+        print("⏳ Waiting stock:", recipeName, "→", table.concat(missing, ", "))
     end
 end
 
@@ -210,10 +202,9 @@ for _, v in ipairs(collectibles) do collectSet[v] = true end
 
 local function forestHasItems()
     for _, obj in ipairs(Workspace:GetDescendants()) do
-        if collectSet[obj.Name]
-        and obj:FindFirstChildWhichIsA("ProximityPrompt", true) then
-            return true
-        end
+        if obj.Name == "Azure Serpent Grass"
+        or obj.Name == "Cloud Mist Herb"
+        or obj.Name == "Chest" then return true end
     end
     return false
 end
@@ -232,9 +223,7 @@ end
 local function getItems()
     local items = {}
     for _, obj in ipairs(Workspace:GetDescendants()) do
-        if collectSet[obj.Name]
-        and getTargetPart(obj)
-        and obj:FindFirstChildWhichIsA("ProximityPrompt", true) then
+        if collectSet[obj.Name] and getTargetPart(obj) then
             table.insert(items, obj)
         end
     end
@@ -246,39 +235,31 @@ local function collectItem(item)
     local targetPart = getTargetPart(item)
     local prompt     = item:FindFirstChildWhichIsA("ProximityPrompt", true)
     if not (targetPart and prompt) then return end
-    if not root or not root.Parent then
-        refreshCharacter(); task.wait(1); return
-    end
+    if not root or not root.Parent then refreshCharacter(); return end
+    local old     = root.CFrame
     local offsets = {
-        Vector3.new(0,3,0), Vector3.new(2,2,0), Vector3.new(-2,2,0),
-        Vector3.new(0,2,2), Vector3.new(0,2,-2)
+        Vector3.new(0,3,0),  Vector3.new(2,2,0),  Vector3.new(-2,2,0),
+        Vector3.new(0,2,2),  Vector3.new(0,2,-2)
     }
     for _, offset in ipairs(offsets) do
-        if not item.Parent then break end
         root.CFrame = targetPart.CFrame + offset
-        task.wait(0.05)
+        task.wait(0.03)
         prompt.RequiresLineOfSight = false
         prompt.HoldDuration = 0
-        for _ = 1, 4 do
-            prompt:InputHoldBegin()
-            task.wait(0.05)
-            prompt:InputHoldEnd()
-        end
+        for _ = 1, 4 do prompt:InputHoldBegin(); task.wait(); prompt:InputHoldEnd() end
         if not item.Parent then break end
-        task.wait(0.1)
     end
+    root.CFrame = old
 end
 
 -- ════════════════════════════════════════════════════════════
 -- AUTO USE PILL
--- Path inventory : ScreenGui.MainFrame.Inventory.ItemList
---                  .InsideFrame.MainFrame.[TypeId/Pill.InstanceId]
--- Path active    : ScreenGui.SecondaryStats.ActivePills
---                  .ScrollingFrame.[TypeId/Pill.InstanceId]
--- Remote         : Clicked:FireServer("Inventory",false,"Equip","TypeId/Pill.InstanceId")
+-- Inventory : ScreenGui.MainFrame.Inventory.ItemList
+--             .InsideFrame.MainFrame.[TypeId/Pill.InstanceId]
+-- Active    : ScreenGui.SecondaryStats.ActivePills
+--             .ScrollingFrame.[TypeId/Pill.InstanceId]
+-- Remote    : Clicked:FireServer("Inventory",false,"Equip","TypeId/Pill.InstanceId")
 -- ════════════════════════════════════════════════════════════
-
--- Ambil semua pill yang sudah aktif (key = frame.Name)
 local function getActivePillIds()
     local active = {}
     pcall(function()
@@ -293,7 +274,6 @@ local function getActivePillIds()
     return active
 end
 
--- Ambil semua pill di inventory yang amount > 0
 local function getInventoryPills()
     local pills = {}
     pcall(function()
@@ -303,7 +283,6 @@ local function getInventoryPills()
             if frame.Name:match("%d+/Pill%.%d+") then
                 local nameLabel   = frame:FindFirstChild("TextLabel", true)
                 local amountLabel = frame:FindFirstChild("TextAmount")
-                -- Robust parse: handle "x5", "5x", "5", dll
                 local amountText  = amountLabel and amountLabel.Text or "0"
                 local amountNum   = tonumber(string.match(amountText, "%d+")) or 0
                 if amountNum > 0 then
@@ -318,7 +297,6 @@ local function getInventoryPills()
     return pills
 end
 
--- Equip semua pill di inventory yang belum aktif
 local function doAutoUsePills()
     local active = getActivePillIds()
     local pills  = getInventoryPills()
@@ -336,20 +314,17 @@ local function doAutoUsePills()
     end
 end
 
--- Loop Auto Use — cek tiap 10 detik
 task.spawn(function()
     while true do
         task.wait(10)
-        if AUTO_USE then
-            doAutoUsePills()
-        end
+        if AUTO_USE then doAutoUsePills() end
     end
 end)
 
 -- ════════════════════════════════════════════════════════════
 -- RECIPES
 -- ════════════════════════════════════════════════════════════
-local recipes = 
+local recipes =
     loadstring(game:HttpGet("https://raw.githubusercontent.com/Syahreza13/script/refs/heads/main/Recipes"))()
 
 local RECIPE_COUNT = #recipes
@@ -360,55 +335,47 @@ local HAND_DONE, NPC_DONE     = 0, 0
 local HAND_TARGET, NPC_TARGET = 0, 0
 
 -- ════════════════════════════════════════════════════════════
--- HAND CRAFT PASS
+-- CRAFT RUNNERS
 -- ════════════════════════════════════════════════════════════
 local function runHandCraftPass()
     if not AUTO_HAND then return end
+    print("🛠 [Hand] Starting pass...")
 
     for i = 1, RECIPE_COUNT do
         if not AUTO_HAND then break end
         local recipeName      = recipes[i][1]
         local ingredientTable = recipes[i][2]
 
-        local _logH = 0
         while not canCraft(ingredientTable) do
             if not AUTO_HAND then break end
-            _logH += 1
-            if _logH % 4 == 1 then missingLog(recipeName, ingredientTable) end
+            missingLog(recipeName, ingredientTable)
             task.wait(5)
         end
         if not AUTO_HAND then break end
 
-        if isTimerRunning() then
-            print("⏱ Waiting previous timer:", getTimerValue(), "s")
-            repeat task.wait(1) until not isTimerRunning() or not AUTO_HAND
+        local existing = getTimerValue()
+        if existing > 0 then
+            print("⏱ Previous timer:", existing, "s — waiting...")
+            task.wait(existing + 0.5)
         end
         if not AUTO_HAND then break end
 
-        print("🛠", recipeName)
+        print("🛠 Handcraft:", recipeName)
         remote:FireServer("AlchemyController", false, "craft", ingredientTable)
         task.wait(0.3)
         remote:FireServer("AlchemyController", false, "mixing", 1)
-
-        local waitStart = tick() + 5
-        repeat task.wait(0.3) until isTimerRunning() or tick() > waitStart
-
-        repeat task.wait(1) until not isTimerRunning() or not AUTO_HAND
-        if not AUTO_HAND then break end
-
+        task.wait(2)
         remote:FireServer("AlchemyController", false, "finishPill")
         HAND_DONE += 1
-        print("📊 Hand:", HAND_DONE, "/", HAND_TARGET)
+        print("📊 Hand:", HAND_DONE, "/", HAND_TARGET > 0 and tostring(HAND_TARGET) or "∞")
         task.wait(0.5)
     end
-    print("🛠 Hand pass done:", HAND_DONE)
+    print("🛠 [Hand] Pass done. Total:", HAND_DONE)
 end
 
--- ════════════════════════════════════════════════════════════
--- NPC CRAFT PASS
--- ════════════════════════════════════════════════════════════
 local function runNPCCraftPass()
     if not AUTO_NPC then return end
+    print("🧪 [NPC] Starting pass...")
 
     local i = 1
     while i <= RECIPE_COUNT do
@@ -416,36 +383,39 @@ local function runNPCCraftPass()
         local recipeName      = recipes[i][1]
         local ingredientTable = recipes[i][2]
 
-        local _logN = 0
         while not canCraft(ingredientTable) do
             if not AUTO_NPC then break end
-            _logN += 1
-            if _logN % 4 == 1 then missingLog(recipeName, ingredientTable) end
+            missingLog(recipeName, ingredientTable)
             task.wait(5)
         end
         if not AUTO_NPC then break end
 
+        print("🧪 NPC:", recipeName)
         local textBefore = getResultText()
         remote:FireServer("AlchemyController", false, "alchemist", ingredientTable)
         task.wait(1.5)
         local result = waitForResult(textBefore, 15)
+
         if not AUTO_NPC then break end
 
         if result == "SUCCESS" or result == "TIMEOUT" then
             NPC_DONE += 1
-            print("✅ NPC:", recipeName, "| Total:", NPC_DONE, "/", NPC_TARGET)
+            print("✅ NPC OK:", recipeName, "| Total:", NPC_DONE, "/", NPC_TARGET > 0 and tostring(NPC_TARGET) or "∞")
             i += 1
         elseif result == "NO_RECIPE" then
-            print("⏭ NO_RECIPE:", recipeName)
+            print("⏭ NO_RECIPE → Skip:", recipeName)
             i += 1
         elseif result == "NO_STONE" then
+            print("⚠️ No Spirit Stone — retry in 10s:", recipeName)
             task.wait(10)
         elseif result == "CANCELLED" then
+            print("🛑 NPC Cancelled")
             break
         end
+
         task.wait(2)
     end
-    print("🧪 NPC pass done:", NPC_DONE)
+    print("🧪 [NPC] Pass done. Total:", NPC_DONE)
 end
 
 -- ════════════════════════════════════════════════════════════
@@ -456,12 +426,7 @@ task.spawn(function()
         task.wait(0.5)
         if not AUTO_FORAGE then task.wait(1); continue end
 
-        if not player.Character
-        or not player.Character:FindFirstChild("HumanoidRootPart") then
-            task.wait(2); continue
-        end
-        root = player.Character.HumanoidRootPart
-
+        print("🌿 Trying to enter forest...")
         remote:FireServer("Forest", false, "Create")
         task.wait(3)
 
@@ -469,38 +434,22 @@ task.spawn(function()
         repeat task.wait(1) until forestHasItems() or tick() > waitItems
 
         if forestHasItems() then
-            local collected   = 0
-            local emptyStreak = 0
-
-            while AUTO_FORAGE do
+            print("📦 Collecting...")
+            while forestHasItems() and AUTO_FORAGE do
                 local items = getItems()
-
-                if #items == 0 then
-                    emptyStreak += 1
-                    if emptyStreak >= 3 then break end
-                    task.wait(1)
-                else
-                    emptyStreak = 0
-                    for _, item in ipairs(items) do
-                        if not AUTO_FORAGE then break end
-                        local hadParent = item.Parent ~= nil
-                        collectItem(item)
-                        if hadParent and not item.Parent then
-                            collected += 1
-                        end
-                        task.wait(0.1)
-                    end
-                    task.wait(0.2)
+                if #items == 0 then break end
+                for _, item in ipairs(items) do
+                    if not AUTO_FORAGE then break end
+                    collectItem(item)
+                    task.wait(0.1)
                 end
+                task.wait(0.3)
             end
-
-            if collected > 0 then
-                print("✅ Collected:", collected, "items")
-            end
-
+            print("✅ Collect done — leaving forest")
             leaveForest()
-            task.wait(3)
+            task.wait(5)
         else
+            print("⏳ Forest not ready — retry in 5s")
             task.wait(5)
         end
     end
@@ -523,11 +472,7 @@ task.spawn(function()
             runHandCraftPass()
         else
             AUTO_HAND = false
-            Rayfield:Notify({
-                Title   = "✅ Handcraft Done",
-                Content = "Total: "..HAND_DONE.." pills",
-                Duration = 8
-            })
+            Rayfield:Notify({Title="Handcraft Done", Content="Total: "..HAND_DONE, Duration=6})
         end
     end
 end)
@@ -549,11 +494,7 @@ task.spawn(function()
             runNPCCraftPass()
         else
             AUTO_NPC = false
-            Rayfield:Notify({
-                Title   = "✅ Alchemist Done",
-                Content = "Total: "..NPC_DONE.." pills",
-                Duration = 8
-            })
+            Rayfield:Notify({Title="NPC Done", Content="Total: "..NPC_DONE, Duration=6})
         end
     end
 end)
@@ -596,9 +537,6 @@ Tab:CreateToggle({
     Name = "💊 Auto Use Pill",
     Callback = function(v)
         AUTO_USE = v
-        if v then
-            -- Langsung equip saat toggle dinyalakan
-            doAutoUsePills()
-        end
+        if v then doAutoUsePills() end
     end
 })
