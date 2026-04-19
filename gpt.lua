@@ -569,6 +569,82 @@ task.spawn(function()
     end
 end)
 
+
+-- ════════════════════════════════════════════════════════════
+-- AUTO USE PILL
+-- Scan inventory → equip pill yang belum aktif
+-- ════════════════════════════════════════════════════════════
+local AUTO_USE = false
+
+-- Ambil semua pill yang sedang aktif (sudah diequip)
+local function getActivePillIds()
+    local active = {}
+    pcall(function()
+        local frame = player.PlayerGui.ScreenGui
+            .SecondaryStats.ActivePills.ScrollingFrame
+        for _, child in ipairs(frame:GetChildren()) do
+            if child.Name:match("%d+/Pill%.%d+") then
+                active[child.Name] = true
+            end
+        end
+    end)
+    return active
+end
+
+-- Ambil semua pill di inventory beserta ID dan namanya
+local function getInventoryPills()
+    local pills = {}
+    pcall(function()
+        local mainFrame = player.PlayerGui.ScreenGui.MainFrame
+            .Inventory.ItemList.InsideFrame.MainFrame
+        for _, frame in ipairs(mainFrame:GetChildren()) do
+            if frame.Name:match("%d+/Pill%.%d+") then
+                local nameLabel   = frame:FindFirstChild("TextLabel", true)
+                local amountLabel = frame:FindFirstChild("TextAmount")
+                local amount = tonumber(amountLabel and amountLabel.Text or "0") or 0
+                if amount > 0 then
+                    table.insert(pills, {
+                        id     = frame.Name,
+                        name   = nameLabel and nameLabel.Text or "Unknown",
+                        amount = amount,
+                    })
+                end
+            end
+        end
+    end)
+    return pills
+end
+
+-- Equip semua pill di inventory yang belum aktif
+local function doAutoUsePills()
+    local active = getActivePillIds()
+    local pills  = getInventoryPills()
+    local used   = 0
+
+    for _, pill in ipairs(pills) do
+        if not active[pill.id] then
+            remote:FireServer("Inventory", false, "Equip", pill.id)
+            print("💊 Equip:", pill.name, "(", pill.id, ")")
+            used += 1
+            task.wait(0.5)
+        end
+    end
+
+    if used > 0 then
+        print("💊 Auto Use: equipped", used, "pills")
+    end
+end
+
+-- Loop Auto Use — cek tiap 10 detik
+task.spawn(function()
+    while true do
+        task.wait(10)
+        if AUTO_USE then
+            doAutoUsePills()
+        end
+    end
+end)
+
 -- ════════════════════════════════════════════════════════════
 -- UI TOGGLES
 -- ════════════════════════════════════════════════════════════
@@ -599,6 +675,17 @@ Tab:CreateToggle({
             NPC_DONE   = 0
             NPC_TARGET = RECIPE_COUNT * LOOP_COUNT
             print("🎯 NPC Target:", NPC_TARGET)
+        end
+    end
+})
+
+Tab:CreateToggle({
+    Name = "💊 Auto Use Pill",
+    Callback = function(v)
+        AUTO_USE = v
+        if v then
+            -- Langsung equip saat toggle dinyalakan
+            doAutoUsePills()
         end
     end
 })
